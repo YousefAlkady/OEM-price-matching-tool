@@ -1,7 +1,6 @@
 # 🔧 Car Part OEM Matcher
 
-This tool compares part names and OEM numbers between your company's price list (Bdeel) and a rival company's price list (e.g., Nour). It uses fuzzy string matching to find equivalent car parts and aligns OEM codes, codes, and prices to produce a clean comparison Excel report.
-
+This tool was developed upon request by Bdeel Auto to automate the process of comparing and mapping car part prices and OEM numbers between the internal Bdeel inventory and a competitor's price list (e.g., Nour). It uses fuzzy string matching to find equivalent parts, making pricing analysis and product alignment faster and more reliable.
 ---
 
 ## 🚀 Features
