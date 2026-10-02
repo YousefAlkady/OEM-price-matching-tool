@@ -1,5 +1,5 @@
 {
-    'name': 'OEM Price Matching Tool',
+    'name': 'Odoo OEM Connect',
     'version': '1.1',
     'category': 'Sales',
     'summary': 'Integration with TecDoc RapidAPI',
