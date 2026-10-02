@@ -1,5 +1,5 @@
 {
-    'name': 'RapidAPI Bdeel',
+    'name': 'OEM Price Matching Tool',
     'version': '1.1',
     'category': 'Sales',
     'summary': 'Integration with TecDoc RapidAPI',
