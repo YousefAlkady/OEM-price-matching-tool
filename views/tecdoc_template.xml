@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="tecdoc_search_page" name="TecDoc Search">
+        &lt;!DOCTYPE html&gt;
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+            <title>TecDoc Parts Search</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+            <link rel="stylesheet" href="/rapidapi_bdeel/static/src/css/tecdoc.css?v=6"/>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>TecDoc Parts Search</h1>
+                    <p>Integrated RapidAPI Data Lookup</p>
+                </div>
+
+                <div class="search-card">
+                    <div class="mode-selector">
+                        <button class="mode-btn active" data-mode="quick">Quick Search</button>
+                        <button class="mode-btn" data-mode="vehicle">Vehicle Search</button>
+                    </div>
+
+                    <div id="quickSearchUI">
+                        <div class="search-type-selector">
+                            <button class="type-btn active" data-type="text">Text</button>
+                            <button class="type-btn" data-type="vin">VIN</button>
+                            <button class="type-btn" data-type="part_number">Part</button>
+                            <button class="type-btn" data-type="oem_number">OEM</button>
+                            <button class="type-btn" data-type="engine_code">Engine</button>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="searchInput" class="search-input" placeholder="Enter search query..."/>
+                        </div>
+                    </div>
+
+                    <div id="vehicleSearchUI" style="display: none;">
+                        <div class="vehicle-dropdowns">
+                            <select id="makeSelect" class="search-input dropdown-select">
+                                <option value="">1. Select Make</option>
+                            </select>
+                            <select id="modelSelect" class="search-input dropdown-select" disabled="disabled">
+                                <option value="">Select Model</option>
+                            </select>
+                            <select id="engineSelect" class="search-input dropdown-select" disabled="disabled">
+                                <option value="">Select Engine</option>
+                            </select>
+                            <select id="categorySelect" class="search-input dropdown-select" disabled="disabled">
+                                <option value="">Select Category (Optional)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="submit-container" style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+                        <button id="submitBtn" class="submit-btn">
+                            <div class="spinner" id="spinner"></div>
+                            <span id="btnText">Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="resultsContainer" class="results-container">
+                    <!-- results go here -->
+                </div>
+            </div>
+
+            <script type="text/javascript" src="/rapidapi_bdeel/static/src/js/tecdoc.js"></script>
+        </body>
+        </html>
+    </template>
+</odoo>

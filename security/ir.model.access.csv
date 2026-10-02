@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_tecdoc_part_user,tecdoc.part.user,model_tecdoc_part,base.group_user,1,1,1,1
+access_tecdoc_part_image_user,tecdoc.part.image.user,model_tecdoc_part_image,base.group_user,1,1,1,1
+access_tecdoc_vehicle_user,tecdoc.vehicle.user,model_tecdoc_vehicle,base.group_user,1,1,1,1
+access_tecdoc_part_cross_reference_user,tecdoc.part.cross_reference.user,model_tecdoc_part_cross_reference,base.group_user,1,1,1,1
+access_tecdoc_api_log_user,tecdoc.api.log.user,model_tecdoc_api_log,base.group_user,1,1,1,1
+access_tecdoc_import_wizard_user,tecdoc.import.wizard.user,model_tecdoc_import_wizard,base.group_user,1,1,1,1

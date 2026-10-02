@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="product_template_tecdoc_form_view" model="ir.ui.view">
+        <field name="name">product.template.tecdoc.form.inherit</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_tecdoc_part" type="object" class="oe_stat_button" icon="fa-database" invisible="not tecdoc_part_id">
+                    <div class="o_field_widget o_stat_info">
+                        <span class="o_stat_text">TecDoc</span>
+                        <span class="o_stat_text">Raw Data</span>
+                    </div>
+                </button>
+            </div>
+            
+            <xpath expr="//page[@name='general_information']" position="inside">
+                <group string="TecDoc Information">
+                    <group>
+                        <button name="action_refetch_tecdoc_data" string="Update &amp; Refetch TecDoc Data" type="object" class="btn-primary" style="margin-bottom:10px; margin-right:10px;" icon="fa-refresh" invisible="not tecdoc_part_id"/>
+                        <button name="action_fallback_search_missing_info" type="object" string="Deep Search Missing Info" class="btn-warning" style="margin-bottom:10px;" icon="fa-search-plus" confirm="Are you sure you want to run a deep search?"/>
+                    </group>
+                    <group>
+                        <field name="tecdoc_brand" readonly="1"/>
+                        <field name="tecdoc_article_number" readonly="1"/>
+                        <field name="tecdoc_oem_number" readonly="1"/>
+                        <field name="tecdoc_part_id" invisible="1"/>
+                    </group>
+                </group>
+            </xpath>
+            
+            <xpath expr="//page[@name='sales']" position="inside">
+                <separator string="Extra Product Media (TecDoc)" colspan="2"/>
+                <field name="product_template_image_ids" nolabel="1" context="{'default_name': name}" mode="kanban" colspan="2">
+                    <kanban>
+                        <field name="id"/>
+                        <field name="name"/>
+                        <field name="image_1920"/>
+                        <templates>
+                            <t t-name="kanban-box">
+                                <div class="oe_kanban_global_click" style="width:150px;height:150px;text-align:center;">
+                                    <div class="o_kanban_image">
+                                        <img t-att-src="kanban_image('product.image', 'image_1920', record.id.raw_value)" alt="Media" style="max-height:100px;max-width:100px;"/>
+                                    </div>
+                                    <div class="oe_kanban_details">
+                                        <strong class="o_kanban_record_title"><field name="name"/></strong>
+                                    </div>
+                                </div>
+                            </t>
+                        </templates>
+                    </kanban>
+                </field>
+                
+                <separator string="TecDoc Cross References" colspan="2"/>
+                <field name="tecdoc_cross_reference_ids" readonly="1" nolabel="1" colspan="2">
+                    <tree>
+                        <field name="brand" string="Alternative Brand"/>
+                        <field name="oem_number" string="OEM Number"/>
+                    </tree>
+                </field>
+                
+                <separator string="TecDoc Compatible Vehicles" colspan="2"/>
+                <field name="tecdoc_vehicle_ids" readonly="1" nolabel="1" colspan="2">
+                    <tree>
+                        <field name="brand" string="Make"/>
+                        <field name="vehicle_model" string="Model"/>
+                        <field name="make_date" string="Year"/>
+                        <field name="type" string="Engine / Type"/>
+                    </tree>
+                </field>
+                
+                <separator string="TecDoc Raw Data" colspan="2" groups="base.group_no_one"/>
+                <field name="tecdoc_raw_data" readonly="1" nolabel="1" colspan="2" groups="base.group_no_one"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

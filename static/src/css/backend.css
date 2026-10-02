@@ -1,0 +1,22 @@
+/* compact upsell tags */
+.o_field_many2many_tags[name="optional_product_ids"] .o_field_widget,
+.o_field_many2many_tags[name="accessory_product_ids"] .o_field_widget,
+.o_field_many2many_tags[name="alternative_product_ids"] .o_field_widget {
+    max-height: 120px;
+    overflow-y: auto;
+    display: block;
+}
+
+.o_form_view .o_field_widget[name="optional_product_ids"] .o_field_many2many_tags,
+.o_form_view .o_field_widget[name="accessory_product_ids"] .o_field_many2many_tags,
+.o_form_view .o_field_widget[name="alternative_product_ids"] .o_field_many2many_tags {
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    padding: 4px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+}
