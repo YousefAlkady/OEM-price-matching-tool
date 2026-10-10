@@ -44,7 +44,21 @@ TINY_PNG = _tiny_png()
 class FakeBinaryResponse(FakeResponse):
     def __init__(self, content=TINY_PNG, status=200):
         super().__init__(status, {})
-        self.content = content
+        self._content = content
+        self.read_any = False
+
+    @property
+    def content(self):
+        self.read_any = True
+        return self._content
+
+    def iter_content(self, chunk_size=65536):
+        self.read_any = True
+        for i in range(0, len(self._content), chunk_size):
+            yield self._content[i:i + chunk_size]
+
+    def close(self):
+        pass
 
 
 def patch_router(routes):

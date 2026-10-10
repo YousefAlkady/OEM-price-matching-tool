@@ -6,7 +6,7 @@
         <field name="inherit_id" ref="product.product_template_only_form_view"/>
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
-                <button name="action_view_tecdoc_part" type="object" class="oe_stat_button" icon="fa-database" invisible="not tecdoc_part_id">
+                <button name="action_view_tecdoc_part" type="object" class="oe_stat_button" icon="fa-database" invisible="not tecdoc_part_id" groups="rapidapi_bdeel.group_tecdoc_viewer">
                     <div class="o_field_widget o_stat_info">
                         <span class="o_stat_text">TecDoc</span>
                         <span class="o_stat_text">Raw Data</span>
@@ -15,7 +15,7 @@
             </div>
             
             <xpath expr="//page[@name='general_information']" position="inside">
-                <group string="TecDoc Information">
+                <group string="TecDoc Information" groups="rapidapi_bdeel.group_tecdoc_viewer">
                     <group>
                         <button name="action_refetch_tecdoc_data" string="Update &amp; Refetch TecDoc Data" type="object" class="btn-primary" style="margin-bottom:10px; margin-right:10px;" icon="fa-refresh" invisible="not tecdoc_part_id" groups="rapidapi_bdeel.group_tecdoc_operator"/>
                         <button name="action_fallback_search_missing_info" type="object" string="Deep Search Missing Info" class="btn-warning" style="margin-bottom:10px;" icon="fa-search-plus" confirm="Are you sure you want to run a deep search?" groups="rapidapi_bdeel.group_tecdoc_operator"/>
@@ -45,7 +45,7 @@
                     </kanban>
                 </field>
                 
-                <separator string="TecDoc Cross References" colspan="2"/>
+                <separator string="TecDoc Cross References" colspan="2" groups="rapidapi_bdeel.group_tecdoc_viewer"/>
                 <field name="tecdoc_cross_reference_ids" readonly="1" nolabel="1" colspan="2">
                     <list>
                         <field name="brand" string="Alternative Brand"/>
@@ -53,7 +53,7 @@
                     </list>
                 </field>
                 
-                <separator string="TecDoc Compatible Vehicles" colspan="2"/>
+                <separator string="TecDoc Compatible Vehicles" colspan="2" groups="rapidapi_bdeel.group_tecdoc_viewer"/>
                 <field name="tecdoc_vehicle_ids" readonly="1" nolabel="1" colspan="2">
                     <list>
                         <field name="brand" string="Make"/>

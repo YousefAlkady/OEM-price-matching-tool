@@ -125,3 +125,10 @@ class TestSecurity(TransactionCase):
             self.env['tecdoc.part'].search_catalog('oem_number', '04465-0K090')
         sent_key = http.get.call_args.kwargs['headers']['x-rapidapi-key']
         self.assertEqual(sent_key, 'env-key')
+
+    def test_oversized_image_is_refused_before_download(self):
+        big = FakeBinaryResponse()
+        big.headers = {'Content-Length': str(50 * 1024 * 1024)}
+        self._http(**{'your-objectstorage.com': big})
+        self.assertIsNone(self.env['tecdoc.api.abstract']._download_binary('https://fsn1.your-objectstorage.com/x.webp'))
+        self.assertFalse(big.read_any, "body was read despite an oversized Content-Length")

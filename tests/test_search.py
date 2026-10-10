@@ -157,3 +157,30 @@ class TestCatalogSearch(TransactionCase):
         self.Part.search_catalog('oem_number', TOYOTA_OEM)
         self.Part.search_catalog('part_number', '0 986 494 153')
         self.assertEqual(self.Part.search_count([('article_id', '=', '70801')]), 1)
+
+    # --- review findings ------------------------------------------------
+    def test_archived_part_is_reused_not_recreated(self):
+        self._routes()
+        self.Part.search_catalog('oem_number', TOYOTA_OEM)
+        part = self.Part.search([('article_id', '=', '70801')])
+        part.active = False
+        self.Part.search_catalog('part_number', '0 986 494 153')
+        self.assertEqual(self.Part.with_context(active_test=False).search_count([('article_id', '=', '70801')]), 1)
+
+    def test_same_oem_in_different_spellings_is_stored_once(self):
+        self._routes()
+        self.Part.search_catalog('oem_number', '04465-0K090')
+        self.Part.search_catalog('oem_number', '044650K090')
+        part = self.Part.search([('article_id', '=', '70801')])
+        self.assertEqual(part.oem_number, '04465-0K090')
+
+    def test_alternatives_need_an_exact_oem_match(self):
+        Product = self.env['product.template']
+        near = self.Part.create({'name': 'near', 'part_number': 'N1', 'oem_number': '12345, 01234-X',
+                                 'product_tmpl_id': Product.create({'name': 'near product'}).id})
+        same = self.Part.create({'name': 'same', 'part_number': 'S1', 'oem_number': '12-34',
+                                 'product_tmpl_id': Product.create({'name': 'same product'}).id})
+        part = self.Part.create({'name': 'part', 'part_number': 'P1', 'oem_number': '1234'})
+        found = part._find_existing_alternative_products()
+        self.assertIn(same.product_tmpl_id, found)
+        self.assertNotIn(near.product_tmpl_id, found)

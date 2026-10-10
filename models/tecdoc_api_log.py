@@ -1,4 +1,9 @@
-from odoo import models, fields
+from datetime import timedelta
+
+from odoo import api, fields, models, tools
+
+# cache-hit rows only feed the cache-hit-rate figure; billed rows are kept for cost history
+CACHED_LOG_RETENTION_DAYS = 90
 
 
 class TecdocApiLog(models.Model):
@@ -20,3 +25,13 @@ class TecdocApiLog(models.Model):
     billed = fields.Boolean(string='Billed Call', index=True, help='The request reached RapidAPI and counts against the monthly quota.')
     duration_ms = fields.Integer(string='Duration (ms)')
     company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company, index=True)
+
+    def init(self):
+        # budget, usage and per-user limits all count by (company/user, billed, create_date)
+        tools.create_index(self.env.cr, 'tecdoc_api_log_usage_idx', self._table, ['company_id', 'billed', 'create_date'])
+        tools.create_index(self.env.cr, 'tecdoc_api_log_user_idx', self._table, ['create_uid', 'billed', 'create_date'])
+
+    @api.autovacuum
+    def _gc_cached_rows(self):
+        cutoff = fields.Datetime.now() - timedelta(days=CACHED_LOG_RETENTION_DAYS)
+        self.search([('status', '=', 'cached'), ('create_date', '<', cutoff)]).unlink()

@@ -127,18 +127,31 @@ class TecdocApiAbstract(models.AbstractModel):
             _logger.warning("Refusing image download from a host that is not allow-listed: %s", url)
             return None
         try:
-            response = requests.get(url, timeout=10, allow_redirects=False)
+            response = requests.get(url, timeout=10, allow_redirects=False, stream=True)
         except requests.exceptions.RequestException as exc:
             _logger.warning("Image download failed for %s: %s", url, exc)
             return None
-        if response.status_code != 200:
-            _logger.warning("Image download for %s returned HTTP %s", url, response.status_code)
+        try:
+            if response.status_code != 200:
+                _logger.warning("Image download for %s returned HTTP %s", url, response.status_code)
+                return None
+            declared = response.headers.get('Content-Length')
+            if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+                _logger.warning("Image %s is larger than %s bytes, skipped", url, MAX_IMAGE_BYTES)
+                return None
+            chunks, size = [], 0
+            for chunk in response.iter_content(65536):
+                size += len(chunk)
+                if size > MAX_IMAGE_BYTES:
+                    _logger.warning("Image %s is larger than %s bytes, skipped", url, MAX_IMAGE_BYTES)
+                    return None
+                chunks.append(chunk)
+            return b''.join(chunks)
+        except requests.exceptions.RequestException as exc:
+            _logger.warning("Image download failed for %s: %s", url, exc)
             return None
-        content = response.content
-        if len(content) > MAX_IMAGE_BYTES:
-            _logger.warning("Image %s is larger than %s bytes, skipped", url, MAX_IMAGE_BYTES)
-            return None
-        return content
+        finally:
+            response.close()
 
     @api.model
     def _make_rapidapi_request(self, endpoint, method="GET", payload=None, params=None, use_cache=True):

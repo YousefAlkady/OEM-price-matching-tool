@@ -20,6 +20,11 @@ def migrate(cr, version):
     if not duplicates:
         return
     cr.execute("UPDATE product_template pt SET tecdoc_part_id = d.keep_id FROM tecdoc_part_dup d WHERE pt.tecdoc_part_id = d.id")
+    cr.execute("""
+        UPDATE tecdoc_part k SET product_tmpl_id = dup.product_tmpl_id
+        FROM tecdoc_part_dup d JOIN tecdoc_part dup ON dup.id = d.id
+        WHERE k.id = d.keep_id AND k.product_tmpl_id IS NULL AND dup.product_tmpl_id IS NOT NULL
+    """)
     cr.execute("UPDATE tecdoc_part_image i SET part_id = d.keep_id FROM tecdoc_part_dup d WHERE i.part_id = d.id")
     cr.execute("UPDATE tecdoc_part_cross_reference x SET part_id = d.keep_id FROM tecdoc_part_dup d WHERE x.part_id = d.id")
     cr.execute("""

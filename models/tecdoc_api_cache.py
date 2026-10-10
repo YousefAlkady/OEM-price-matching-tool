@@ -4,6 +4,8 @@ from datetime import timedelta
 
 from odoo import models, fields, api
 
+from .compat import unique_constraint
+
 _logger = logging.getLogger(__name__)
 
 
@@ -15,16 +17,15 @@ class TecdocApiCache(models.Model):
     endpoint = fields.Char()
     response = fields.Text()
     expires_at = fields.Datetime(index=True)
-    hit_count = fields.Integer(default=0)
 
-    _sql_constraints = [('key_unique', 'unique(key)', 'Cache key must be unique.')]
+    _sql_constraints = [unique_constraint('key_unique', 'key', 'Cache key must be unique.')]
 
     @api.model
     def get_valid(self, key):
         entry = self.search([('key', '=', key), ('expires_at', '>', fields.Datetime.now())], limit=1)
         if not entry:
             return None
-        entry.hit_count += 1
+        # read-only on purpose: cache hits are counted in tecdoc.api.log (insert-only), not on this row
         return json.loads(entry.response)
 
     @api.model

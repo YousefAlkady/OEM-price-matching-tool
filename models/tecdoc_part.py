@@ -3,10 +3,12 @@ import json
 import logging
 import re
 
+import psycopg2
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 from odoo.tools.image import image_process
 
+from .compat import unique_constraint
 from .rapidapi_abstract import normalize_part_no
 
 _logger = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ class TecdocPart(models.Model):
     part_number = fields.Char(string='Part Number', index=True, required=True)
     part_number_key = fields.Char(string='Normalized Part Number', compute='_compute_part_number_key', store=True, index=True)
     oem_number = fields.Text(string='OEM Number')
+    oem_keys = fields.Char(string='Normalized OEM Numbers', compute='_compute_oem_keys', store=True, index=True,
+                           help="Comma-wrapped normalized OEM numbers, e.g. ',044650K090,', for exact matching.")
     brand = fields.Char(string='Brand')
     vehicle_model = fields.Char(string='Vehicle Model')
     vin = fields.Char(string='VIN', index=True)
@@ -64,8 +68,14 @@ class TecdocPart(models.Model):
     product_tmpl_id = fields.Many2one('product.template', string='Odoo Product', help='Linked Odoo E-commerce Product')
 
     _sql_constraints = [
-        ('article_id_unique', 'unique(article_id)', 'This TecDoc article is already saved as a part.'),
+        unique_constraint('article_id_unique', 'article_id', 'This TecDoc article is already saved as a part.'),
     ]
+
+    @api.depends('oem_number')
+    def _compute_oem_keys(self):
+        for rec in self:
+            keys = sorted({normalize_part_no(o) for o in (rec.oem_number or '').split(',') if normalize_part_no(o)})
+            rec.oem_keys = f",{','.join(keys)}," if keys else False
 
     @api.depends('part_number')
     def _compute_part_number_key(self):
@@ -254,7 +264,9 @@ class TecdocPart(models.Model):
         vehicles_by_id = Vehicle.upsert_from_cars([car for cars in fitment.values() for car in cars])
 
         article_ids = [str(a.get('articleId')) for a in articles if a.get('articleId')]
-        existing = {p.article_id: p for p in self.search([('article_id', 'in', article_ids)])} if article_ids else {}
+        # include archived parts: article_id is unique across active and archived records
+        existing = {p.article_id: p for p in self.with_context(active_test=False).search(
+            [('article_id', 'in', article_ids)])} if article_ids else {}
 
         saved = self.browse()
         for article in articles:
@@ -263,14 +275,16 @@ class TecdocPart(models.Model):
                 continue
             part = existing.get(vals['article_id'])
             if oem_number:
-                current = [o.strip() for o in (part.oem_number or '').split(',')] if part else []
-                if oem_number not in current:
+                current = [o.strip() for o in (part.oem_number or '').split(',') if o.strip()] if part else []
+                if normalize_part_no(oem_number) not in {normalize_part_no(o) for o in current}:
                     current.append(oem_number)
-                vals['oem_number'] = ", ".join(o for o in current if o)
+                vals['oem_number'] = ", ".join(current)
             if part:
                 part.write(vals)
             else:
-                part = self.create(vals)
+                part = self._create_unless_taken(vals)
+                if not part:
+                    continue
 
             vehicle_ids = [vehicles_by_id[str(c.get('vehicleId'))].id
                            for c in fitment.get(vals['article_id'] or '', []) if str(c.get('vehicleId')) in vehicles_by_id]
@@ -288,6 +302,15 @@ class TecdocPart(models.Model):
                 })
             saved |= part
         return saved
+
+    def _create_unless_taken(self, vals):
+        """Create a part; if a parallel request saved the same article first, skip it here."""
+        try:
+            with self.env.cr.savepoint():
+                return self.create(vals)
+        except psycopg2.errors.UniqueViolation:
+            _logger.info("Article %s was saved by a parallel request; skipped in this one", vals.get('article_id'))
+            return self.browse()
 
     def _vin_lookup(self, vin):
         api_model = self._api()
@@ -377,7 +400,8 @@ class TecdocPart(models.Model):
                           if k in ('brand', 'category', 'raw_data') or not record[k]
                           or (k == 'name' and 'Pending Fetch' in (record.name or ''))}
                 update.pop('part_number', None)
-                if vals['article_id'] and self.search_count([('article_id', '=', vals['article_id']), ('id', '!=', record.id)]):
+                if vals['article_id'] and self.with_context(active_test=False).search_count(
+                        [('article_id', '=', vals['article_id']), ('id', '!=', record.id)]):
                     _logger.info("Article %s already saved as another part; not reassigning", vals['article_id'])
                     update.pop('article_id', None)
                 if not record.oem_number:
@@ -518,8 +542,11 @@ class TecdocPart(models.Model):
         """Products already in the catalog that share an OEM number or are listed as cross references."""
         self.ensure_one()
         products = self.env['product.template']
-        for oem in [o.strip() for o in (self.oem_number or '').split(',') if o.strip()]:
-            siblings = self.search([('oem_number', 'ilike', oem), ('id', '!=', self.id), ('product_tmpl_id', '!=', False)])
+        keys = [k for k in (self.oem_keys or '').split(',') if k]
+        if keys:
+            # oem_keys is ",KEY1,KEY2,": matching ",KEY," is an exact match on a normalized number
+            domain = ['|'] * (len(keys) - 1) + [('oem_keys', 'like', f',{k},') for k in keys]
+            siblings = self.search(domain + [('id', '!=', self.id), ('product_tmpl_id', '!=', False)])
             products |= siblings.mapped('product_tmpl_id')
         numbers = self.cross_reference_ids.mapped('oem_number')
         if numbers:
