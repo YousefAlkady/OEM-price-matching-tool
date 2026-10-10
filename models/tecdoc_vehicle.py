@@ -25,7 +25,7 @@ class TecdocVehicle(models.Model):
             'name': 'Compatible Parts',
             'type': 'ir.actions.act_window',
             'res_model': 'tecdoc.part',
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'domain': [('vehicle_ids', '=', self.id)],
             'context': {'default_vehicle_ids': [(4, self.id)]},
         }

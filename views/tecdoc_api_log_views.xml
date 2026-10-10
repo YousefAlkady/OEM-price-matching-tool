@@ -4,12 +4,12 @@
         <field name="name">tecdoc.api.log.tree</field>
         <field name="model">tecdoc.api.log</field>
         <field name="arch" type="xml">
-            <tree decoration-danger="status == 'error'" decoration-success="status == 'success'">
+            <list decoration-danger="status == 'error'" decoration-success="status == 'success'">
                 <field name="create_date"/>
                 <field name="endpoint"/>
                 <field name="response_code"/>
                 <field name="status"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -45,7 +45,7 @@
     <record id="action_tecdoc_api_log" model="ir.actions.act_window">
         <field name="name">API Logs</field>
         <field name="res_model">tecdoc.api.log</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
     <menuitem id="menu_tecdoc_api_log"

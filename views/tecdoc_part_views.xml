@@ -28,7 +28,7 @@
         <field name="name">tecdoc.part.tree</field>
         <field name="model">tecdoc.part</field>
         <field name="arch" type="xml">
-            <tree>
+            <list>
                 <field name="part_number"/>
                 <field name="name"/>
                 <field name="brand"/>
@@ -36,7 +36,7 @@
                 <field name="category" optional="show"/>
                 <field name="product_tmpl_id"/>
                 <field name="vehicle_ids" widget="many2many_tags" optional="hide"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -83,11 +83,11 @@
                     <notebook>
                         <page string="Images">
                             <field name="image_ids">
-                                <tree>
+                                <list>
                                     <field name="image" widget="image" options="{'size': [64, 64]}"/>
                                     <field name="name"/>
                                     <field name="image_url"/>
-                                </tree>
+                                </list>
                                 <form>
                                     <sheet>
                                         <group>
@@ -101,21 +101,21 @@
                         </page>
                         <page string="Cross References">
                             <field name="cross_reference_ids">
-                                <tree>
+                                <list>
                                     <field name="brand"/>
                                     <field name="oem_number"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                         <page string="Compatible Vehicles">
                             <field name="vehicle_ids">
-                                <tree>
+                                <list>
                                     <field name="brand"/>
                                     <field name="vehicle_model"/>
                                     <field name="make_date"/>
                                     <field name="type"/>
                                     <field name="vin"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                         <page string="Raw Data">
@@ -147,7 +147,7 @@
     <record id="action_tecdoc_parts" model="ir.actions.act_window">
         <field name="name">TecDoc Parts</field>
         <field name="res_model">tecdoc.part</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
     <menuitem id="menu_tecdoc_root"
@@ -163,7 +163,7 @@
     <record id="action_tecdoc_vehicles" model="ir.actions.act_window">
         <field name="name">Vehicles Database</field>
         <field name="res_model">tecdoc.vehicle</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
     <menuitem id="menu_tecdoc_vehicles"
