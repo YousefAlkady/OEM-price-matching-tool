@@ -1,72 +1,28 @@
-# 🔧 Car Part OEM Matcher
+# Odoo OEM Connect
 
-This tool was developed upon request by Bdeel Auto to automate the process of comparing and mapping car part prices and OEM numbers between the internal Bdeel inventory and a competitor's price list (e.g., Nour). It uses fuzzy string matching to find equivalent parts, making pricing analysis and product alignment faster and more reliable.
----
+Odoo 18 module that links a company's own product references to international OEM numbers, compatible vehicles, images and alternative parts, using the TecDoc data from the RapidAPI "Auto Parts Catalog" API (pay per call, one subscription per client).
 
-## 🚀 Features
+Roadmap and architecture: see [PLAN.md](PLAN.md).
 
-- ✅ Fuzzy matching using `RapidFuzz` for Arabic/English part names
-- ✅ Matches parts with a similarity score ≥ 75%
-- ✅ Skips irrelevant rows (e.g. ones containing "وش")
-- ✅ Outputs a clean Excel sheet showing:
-  - Matched product names
-  - Bdeel and Rival OEM numbers
-  - Price comparison
-  - Match score for transparency
+## Install (development)
 
----
+1. Copy or symlink this folder into your Odoo addons path **named `rapidapi_bdeel`** (the folder name must match the module name).
+2. Restart Odoo, update the apps list, install **Odoo OEM Connect**.
+3. Settings > RapidAPI Settings: enter your RapidAPI key and host (`auto-parts-catalog.p.rapidapi.com`).
 
-## 📁 Included Data
+Depends on `product`, `stock`, `delivery`, `sale`, `website_sale`.
 
-This repository contains:
+## OEM price matching script
 
-- `data/Bdeel_list.xlsx` – Sample product list from Bdeel Company  
-- `data/Nour.xlsx` – Sample product list from Nour Company  
-- `Mapped_OEM_Parts.xlsx` – Auto-generated match report from the script
+`OEM-Price-matching-tool.py` is the original standalone script. It fuzzy-matches part names between the company's product export (`Bdeel_List.xlsx`) and a competitor list (`Nour.xlsx`) with RapidFuzz and writes `Mapped_OEM_Parts.xlsx`. It is being replaced by a matcher inside the module (see PLAN.md, phases 3b and 4).
 
-📌 **Permission Notice**:  
-Both Bdeel and Nour have granted permission for their product list samples to be shared publicly for educational and research purposes only. OEMs and prices shown here are sample data reflecting real-world formatting.
+```bash
+pip install pandas rapidfuzz openpyxl
+python OEM-Price-matching-tool.py
+```
 
----
+The sample spreadsheets are shared with permission for educational and research use only.
 
-## 📂 Input Format
+## License
 
-### `Bdeel_list.xlsx`
-| Name Arabic      | Internal Reference | Price |
-|------------------|--------------------|-------|
-| فلتر هواء هوندا | BDE123              | 120   |
-
-### `Nour.xlsx`
-| Name            | Code1   | Code2   | Price |
-|----------------|---------|---------|-------|
-| فلتر هواء هوندا | N123    | X456    | 135   |
-
----
-
-## 📤 Output
-
-`Mapped_OEM_Parts.xlsx` includes:
-
-| Bdeel Part Name   | Nour           | OEM Number | Rival Code1 | Rival Code2 | Bdeel Price | Rival Price | Match Score |
-|------------------|----------------|------------|-------------|-------------|--------------|-------------|-------------|
-
-Skipped parts (e.g. those containing "وش") are included at the bottom with a `"Skipped"` label.
-
----
-
-## ⚙️ How It Works
-
-- Loads the Excel files using `pandas`
-- Filters out noisy or unwanted rows
-- Compares each Bdeel part name to all rival names using fuzzy matching
-- Accepts only matches above a similarity threshold (default: 75)
-- Outputs a result file with all matches and skipped items
-
----
-
-## 🧪 How to Run
-
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/yourusername/car-part-oem-matcher.git
-   cd car-part-oem-matcher
+OPL-1 for the module (see `__manifest__.py`); the repository LICENSE file covers the original script.

@@ -65,7 +65,8 @@ class TecdocPart(models.Model):
             product_vals = {
                 'name': product_name,
                 'default_code': record.part_number,
-                'detailed_type': 'product',
+                'type': 'consu',
+                'is_storable': True,
                 'description': desc,
                 'tecdoc_brand': record.brand,
                 'tecdoc_article_number': record.part_number,
@@ -140,13 +141,14 @@ class TecdocPart(models.Model):
                                 'default_code': acc_oem,
                                 'tecdoc_brand': acc_brand,
                                 'tecdoc_article_number': acc_oem,
-                                'detailed_type': 'product',
+                                'type': 'consu',
+                'is_storable': True,
                             })
                             acc_product_ids.append(new_acc.id)
                     if acc_product_ids:
                         product_tmpl.accessory_product_ids = [(6, 0, acc_product_ids)]
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning(f"Accessories sync failed for {record.part_number}: {exc}")
 
             if record.cross_reference_ids:
                 alt_product_ids = []
@@ -165,7 +167,8 @@ class TecdocPart(models.Model):
                             'default_code': cross.oem_number,
                             'tecdoc_brand': cross.brand or '',
                             'tecdoc_article_number': cross.oem_number,
-                            'detailed_type': 'product',
+                            'type': 'consu',
+                'is_storable': True,
                         })
                         alt_product_ids.append(new_alt.id)
                 if alt_product_ids:
@@ -218,7 +221,7 @@ class TecdocPart(models.Model):
             if isinstance(data, dict) and 'error' in data:
                 return {'type': 'ir.actions.client', 'tag': 'display_notification', 'params': {'title': 'API Error', 'message': data['message'], 'type': 'danger'}}
 
-            articles = data.get('articles') or []
+            articles = (data.get('articles') if isinstance(data, dict) else None) or []
             vehicles = []
             for art in articles:
                 vehicles.extend(art.get('compatibleCars') or [])
@@ -298,7 +301,7 @@ class TecdocPart(models.Model):
                 if isinstance(data, dict) and 'error' in data:
                     return {'type': 'ir.actions.client', 'tag': 'display_notification', 'params': {'title': 'API Error', 'message': data['message'], 'type': 'danger'}}
 
-                articles = data.get('articles') or []
+                articles = (data.get('articles') if isinstance(data, dict) else None) or []
                 for art in articles:
                     art_id = str(art.get('articleId', ''))
                     if art_id:
@@ -320,7 +323,7 @@ class TecdocPart(models.Model):
 
                         if needs_cross_refs:
                             cr_data = api_abstract._make_rapidapi_request(f"/artlookup/select-article-cross-references/article-id/{art_id}/lang-id/4")
-                            if cr_data and 'articles' in cr_data:
+                            if isinstance(cr_data, dict) and 'articles' in cr_data:
                                 CrossRef = self.env['tecdoc.part.cross_reference']
                                 for cross in cr_data['articles']:
                                     oem_num = cross.get('articleNo', '')
@@ -343,7 +346,7 @@ class TecdocPart(models.Model):
                                 v_data = api_abstract._make_rapidapi_request("/articles/get-compatible-cars-by-oem-no/type-id/1", params={
                                     "langId": "4", "countryFilterId": "63", "articleOemNo": oem_candidate
                                 })
-                                if v_data and 'articles' in v_data:
+                                if isinstance(v_data, dict) and 'articles' in v_data:
                                     v_articles = v_data.get('articles') or []
                                     v_list = []
                                     for v_art in v_articles:
@@ -395,8 +398,8 @@ class TecdocPart(models.Model):
                                                         'image_url': media['s3image'],
                                                         'image': base64.b64encode(img_dl.content)
                                                     })
-                                        except Exception:
-                                            pass
+                                        except Exception as exc:
+                                            _logger.warning(f"Image download failed for {record.part_number}: {exc}")
 
                         found_data = True
                         break
@@ -427,8 +430,8 @@ class TecdocPart(models.Model):
 
                     if oem_set:
                         record.oem_number = ", ".join(sorted(filter(None, oem_set)))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning(f"Could not re-parse raw data for {record.part_number}: {exc}")
 
     @api.model
     def api_save_parts_from_data(self, articles_data, vehicle_data=None, oem_number=None, compatible_vehicles=None):
@@ -681,5 +684,5 @@ class TecdocPart(models.Model):
                         'image_url': image_url,
                         'image': img_data,
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning(f"Image download failed for {image_url}: {exc}")

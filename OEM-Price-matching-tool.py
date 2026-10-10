@@ -18,7 +18,7 @@ Rival_Code2 = Rival_df['Code2']
 Rival_Price = Rival_df['Price']
 
 #Containers
-Matched_Rows = []-==
+Matched_Rows = []
 Skipped_wesh = []
 unMatched = []
 
