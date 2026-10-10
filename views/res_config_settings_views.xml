@@ -16,6 +16,20 @@
                             <field name="tecdoc_rapidapi_host"/>
                         </setting>
                     </block>
+                    <block title="Usage and Cost Control" name="tecdoc_usage_settings">
+                        <setting string="Calls This Month" help="Billed RapidAPI calls this month for this company">
+                            <field name="tecdoc_calls_this_month"/>
+                        </setting>
+                        <setting string="Monthly Call Budget" help="Hard stop after this many billed calls per month (0 = no cap)">
+                            <field name="tecdoc_monthly_call_budget"/>
+                        </setting>
+                        <setting string="Calls per User per Minute" help="Per-user limit on billed calls (0 = no limit)">
+                            <field name="tecdoc_user_calls_per_minute"/>
+                        </setting>
+                        <setting string="Cache Lifetime (days)" help="How long an API response is reused before refetching">
+                            <field name="tecdoc_cache_ttl_days"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>
