@@ -17,7 +17,8 @@ class CatalogController(http.Controller):
         return icp.get_param('tecdoc.lang_id', '4'), icp.get_param('tecdoc.country_filter_id', '63')
 
     def _catalog_get(self, endpoint):
-        data = request.env['tecdoc.api.abstract']._make_rapidapi_request(endpoint, method="GET")
+        api = request.env['tecdoc.api.abstract'].with_context(tecdoc_interactive=True)
+        data = api._make_rapidapi_request(endpoint, method="GET")
         if isinstance(data, dict) and data.get("error") == "forbidden":
             return None, {"status": 403, "error": "Forbidden", "message": data["message"]}
         if isinstance(data, dict) and "error" in data:

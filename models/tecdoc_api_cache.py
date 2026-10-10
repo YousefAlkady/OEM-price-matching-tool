@@ -1,5 +1,7 @@
+import base64
 import json
 import logging
+import zlib
 from datetime import timedelta
 
 from odoo import models, fields, api
@@ -7,6 +9,20 @@ from odoo import models, fields, api
 from .compat import unique_constraint
 
 _logger = logging.getLogger(__name__)
+
+# fitment answers can be several MB of JSON; zlib shrinks them about 25x
+COMPRESSED_PREFIX = 'z:'
+
+
+def _pack(data):
+    raw = json.dumps(data, separators=(',', ':')).encode('utf-8')
+    return COMPRESSED_PREFIX + base64.b64encode(zlib.compress(raw, 6)).decode('ascii')
+
+
+def _unpack(text):
+    if text.startswith(COMPRESSED_PREFIX):
+        return json.loads(zlib.decompress(base64.b64decode(text[len(COMPRESSED_PREFIX):])))
+    return json.loads(text)  # rows stored before compression
 
 
 class TecdocApiCache(models.Model):
@@ -26,13 +42,13 @@ class TecdocApiCache(models.Model):
         if not entry:
             return None
         # read-only on purpose: cache hits are counted in tecdoc.api.log (insert-only), not on this row
-        return json.loads(entry.response)
+        return _unpack(entry.response)
 
     @api.model
     def store(self, key, endpoint, data, ttl_days):
         vals = {
             'endpoint': endpoint,
-            'response': json.dumps(data),
+            'response': _pack(data),
             'expires_at': fields.Datetime.now() + timedelta(days=ttl_days),
         }
         entry = self.search([('key', '=', key)], limit=1)

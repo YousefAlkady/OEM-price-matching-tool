@@ -80,8 +80,9 @@ class TecdocApiAbstract(models.AbstractModel):
         if budget and used >= budget * 0.8:
             _logger.warning("TecDoc API budget at %s/%s calls this month", used, budget)
 
+        # the per-user limit protects interactive search; bulk jobs (deep search, imports) are bounded by the budget
         per_minute = self._get_int_param('tecdoc.user_calls_per_minute', DEFAULT_USER_CALLS_PER_MINUTE)
-        if per_minute:
+        if per_minute and self.env.context.get('tecdoc_interactive'):
             recent = self.env['tecdoc.api.log'].sudo().search_count([
                 ('billed', '=', True),
                 ('create_uid', '=', self.env.uid),

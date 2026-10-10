@@ -79,16 +79,17 @@ class TecdocVehicle(models.Model):
             return
         first = mv_list[0] if mv_list and isinstance(mv_list[0], dict) else {}
 
-        model = decoder_data.get('model', '')
-        if not model:
-            models_arr = (inner.get('matchingModels') or {}).get('array') if isinstance(inner.get('matchingModels'), dict) else None
-            if isinstance(models_arr, list) and models_arr:
-                model = models_arr[0].get('modelName', '')
-        brand = decoder_data.get('make', '') or (first.get('carName', '').split() or [''])[0]
+        # TecDoc names first: fitment data and the make filter use them (e.g. 'VW', not 'VOLKSWAGEN');
+        # the second decoder is US-oriented and often rejects other VINs
+        models_arr = (inner.get('matchingModels') or {}).get('array') if isinstance(inner.get('matchingModels'), dict) else None
+        model = (models_arr[0].get('modelName', '') if isinstance(models_arr, list) and models_arr else '') \
+            or decoder_data.get('model', '')
+        brand = (first.get('carName', '').split() or [''])[0] or decoder_data.get('make', '')
+        vehicle_id = first.get('vehicleId')
 
         self.create({
             'vin': vin,
-            'vehicle_id': str(first.get('vehicleId', '')) or False,
+            'vehicle_id': str(vehicle_id) if vehicle_id not in (None, '', 'None') else False,
             'brand': brand,
             'vehicle_model': model,
             'make_date': str(decoder_data.get('year', decoder_data.get('model_year', ''))),

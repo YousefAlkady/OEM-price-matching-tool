@@ -68,4 +68,8 @@ call("compatible_cars_hyundai", "/articles/get-compatible-cars-by-oem-no/type-id
      params={"langId": "4", "countryFilterId": "63", "articleOemNo": "86551-AA000"})
 call("compatible_cars_hyundai_egypt_filter_test", "/articles/get-compatible-cars-by-oem-no/type-id/1",
      params={"langId": "4", "articleOemNo": "86551-AA000"})
+# VIN lookups (public example VIN from VIN-format documentation)
+SAMPLE_VIN = "WVWZZZ1JZXW000001"
+call("vin_check", f"/vin/tecdoc-vin-check/{SAMPLE_VIN}")
+call("vin_decoder", f"/vin/decoder-v2/{SAMPLE_VIN}")
 print(f"done, {calls} API calls made")

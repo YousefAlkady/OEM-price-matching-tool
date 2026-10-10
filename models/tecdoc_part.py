@@ -56,7 +56,6 @@ class TecdocPart(models.Model):
     hs_code = fields.Char(string='HS Code')
     barcode = fields.Char(string='Barcode (EAN)')
     specs_text = fields.Text(string='Specifications')
-    accessories_raw = fields.Text(string='Accessories Raw JSON')
     article_id = fields.Char(string='TecDoc Article ID', index=True)
     active = fields.Boolean(default=True)
     raw_data = fields.Text(string='Raw API Data')
@@ -106,6 +105,7 @@ class TecdocPart(models.Model):
     # ------------------------------------------------------------------
     @api.model
     def search_catalog(self, search_type, query=None, **kwargs):
+        self = self.with_context(tecdoc_interactive=True)
         api_model = self._api()
         if not self.env.su and not self.env.user.has_group('rapidapi_bdeel.group_tecdoc_operator'):
             return {"status": 403, "error": "Forbidden", "message": "You need the OEM Connect Operator role to search the catalog.", "data": []}
@@ -528,15 +528,6 @@ class TecdocPart(models.Model):
             if alternatives:
                 product_tmpl.alternative_product_ids = [(6, 0, alternatives.ids)]
 
-            if record.accessories_raw:
-                try:
-                    numbers = [a.get('articleNo') for a in json.loads(record.accessories_raw) if a.get('articleNo')]
-                except (ValueError, TypeError, AttributeError) as exc:
-                    _logger.warning("Accessories data unreadable for %s: %s", record.part_number, exc)
-                    numbers = []
-                accessories = ProductTmpl.search([('default_code', 'in', numbers)]) if numbers else ProductTmpl
-                if accessories:
-                    product_tmpl.accessory_product_ids = [(6, 0, accessories.ids)]
 
     def _find_existing_alternative_products(self):
         """Products already in the catalog that share an OEM number or are listed as cross references."""

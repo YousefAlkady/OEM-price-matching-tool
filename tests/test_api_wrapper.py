@@ -3,7 +3,7 @@ from datetime import timedelta
 from odoo import fields
 from odoo.tests.common import TransactionCase, tagged
 
-from .common import FakeResponse, patch_http
+from .common import FakeResponse, patch_router
 
 SEARCH = "/artlookup/search-articles-by-article-no"
 
@@ -22,7 +22,7 @@ class TestApiWrapper(TransactionCase):
         cls.Log = cls.env['tecdoc.api.log'].sudo()
 
     def _http(self, *responses):
-        patcher, mocked = patch_http(*responses)
+        patcher, mocked = patch_router({'p.rapidapi.com': list(responses)})
         self.addCleanup(patcher.stop)
         return mocked
 
@@ -74,9 +74,10 @@ class TestApiWrapper(TransactionCase):
         self.assertIn('message', result)
         self.assertEqual(http.get.call_count, 1)
 
-    def test_user_rate_limit_blocks_the_call(self):
+    def test_user_rate_limit_blocks_interactive_calls(self):
         self.env['ir.config_parameter'].sudo().set_param('tecdoc.user_calls_per_minute', 1)
         http = self._http(FakeResponse(200, {"articles": []}))
+        self.api = self.api.with_context(tecdoc_interactive=True)
         self._search("AAA1")
         result = self._search("BBB2")
         self.assertEqual(result['error'], 'rate_limit')

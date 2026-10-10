@@ -13,23 +13,6 @@ class FakeResponse:
         return self._body
 
 
-def patch_http(*responses):
-    """Patch requests.get/post to return the given responses in order. Returns (patcher, mock_get, mock_post)."""
-    patcher = patch(REQUESTS_PATH)
-    mocked = patcher.start()
-    queue = list(responses)
-
-    def next_response(*args, **kwargs):
-        return queue.pop(0) if len(queue) > 1 else queue[0]
-
-    mocked.get.side_effect = next_response
-    mocked.post.side_effect = next_response
-    # keep the real exception classes so `except requests.exceptions...` still works
-    import requests as real_requests
-    mocked.exceptions = real_requests.exceptions
-    return patcher, mocked
-
-
 def _tiny_png():
     import io
     from PIL import Image
@@ -75,6 +58,8 @@ def patch_router(routes):
         mocked.calls.append(url)
         for fragment, response in routes.items():
             if fragment in url:
+                if isinstance(response, list):
+                    return response.pop(0) if len(response) > 1 else response[0]
                 return response
         raise AssertionError(f"Unexpected HTTP call in test: {url}")
 

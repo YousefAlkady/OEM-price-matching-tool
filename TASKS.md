@@ -8,23 +8,23 @@ Verification command for all tasks unless stated:
 ## Phase 0: Dev environment (do first)
 - [x] 0.0 Phase 1 fixes merged to local `main`. (Push blocked: remote repo not found.)
 - [x] 0.1 Record API fixtures (done, 17 calls; 83/100 free calls left). Findings in `docs/api-findings.md`.
-- [ ] 0.2 Odoo 18 test harness: venv deps installed, throwaway DB, `odoo.conf` in `C:\Odoo\devenv`, module symlinked as `rapidapi_bdeel`. AC: module installs with zero errors/warnings; one smoke test passes. Dep: Postgres login. [S]
-- [ ] 0.3 Fix any install errors found by 0.2 (view xml, field names, deps). AC: clean install + upgrade. Dep 0.2. [S-M]
+- [x] 0.2 Odoo 18 test harness: venv deps installed, throwaway DB, `odoo.conf` in `C:\Odoo\devenv`, module symlinked as `rapidapi_bdeel`. AC: module installs with zero errors/warnings; one smoke test passes. Dep: Postgres login. [S]
+- [x] 0.3 Fix any install errors found by 0.2 (view xml, field names, deps). AC: clean install + upgrade. Dep 0.2. [S-M]
 ### Checkpoint 0: module installs on Odoo 18, fixtures exist, findings written into `docs/api-findings.md`.
 
 ## Phase 2: Cost control and honest data layer
-- [ ] 2.1 API log: wrapper writes `tecdoc.api.log` (endpoint, params hash, status, duration, company). AC: every call logged incl. failures; test with mocked `requests`. Files: rapidapi_abstract.py, tecdoc_api_log.py + view, tests. Dep 0.3. [M]
-- [ ] 2.2 Response cache: model `tecdoc.api.cache` keyed (endpoint, params_hash), TTL setting (default 30 days, configurable), used by the wrapper. AC: second identical call = 0 HTTP calls; expired entry refetched; test proves it. Dep 2.1. [M]
-- [ ] 2.3 Normalized lookup keys: `oem_key` (indexed, normalized) on part and cross-reference; replace broken `oem_number = query` cache check. AC: search "86551-AA000", "86551AA000", "86551 aa000" hit the same cached part. Files: tecdoc_part.py, tecdoc_part_cross_reference.py, db_service.py, tests. Dep 2.2. [M]
-- [ ] 2.4 Call budget: per-company monthly cap + counter; hard stop with a clear message; warning at 80%. AC: cap reached -> no HTTP call, message returned; counter resets monthly. Files: settings, wrapper, log. Dep 2.1. [M]
-- [ ] 2.5 Lean enrichment: article + cross-refs mandatory, fitment/images/accessories lazy and cached; remove double `action_create_odoo_product` and hard-coded `needs_images`. AC: enriching one SKU = at most 3 logged calls on fixtures. Dep 2.2. [M]
-- [ ] 2.6 Read-only search: search no longer creates products, accessories or cross-ref products; explicit "Add to catalog" action. AC: after a search `product.template` count unchanged; button creates exactly one product. Dep 2.5. [M]
-- [ ] 2.7 Dedupe + unique constraint `(article_id)`/`(oem_key)` with a migration that merges existing duplicates. AC: install on DB with seeded duplicates merges them. Dep 2.3. [S]
-- [ ] 2.8 Security: groups Viewer/Operator/Admin, rewrite `ir.model.access.csv`, record rules, controllers stop using blanket `sudo()`. AC: Viewer cannot write/delete (test per model); Operator can search/enrich; Admin sees settings and budget. [M]
-- [ ] 2.9 Replace session-based rate limit with per-user DB-backed limit. AC: new session cannot bypass. Dep 2.1. [S]
-- [ ] 2.10 Fix category field, remove the `countryFilterId` assumption (no effect per findings), read `constructionIntervalStart/End` for vehicle dates, `langId` as setting. AC: category differs from name; vehicle date range filled on fixtures. Dep 0.1. [S]
-- [ ] 2.11 Bound the data: keep a ranked top-N alternatives set (not hundreds), and filter fitment to the client's makes/models, stored compactly (fixture shows 14,792 cars for one OEM). AC: enriching the Toyota fixture stores <= N alternatives and only matching vehicles. See `docs/api-findings.md`. Dep 2.5. [M]
-### Checkpoint 2: one OEM search on fixtures = at most 3 logged calls, repeat = 0; budget stops calls; security tests pass; code-review + security-review run; owner review; merge.
+- [x] 2.1 API log: wrapper writes `tecdoc.api.log` (endpoint, params hash, status, duration, company). AC: every call logged incl. failures; test with mocked `requests`. Files: rapidapi_abstract.py, tecdoc_api_log.py + view, tests. Dep 0.3. [M]
+- [x] 2.2 Response cache: model `tecdoc.api.cache` keyed (endpoint, params_hash), TTL setting (default 30 days, configurable), used by the wrapper. AC: second identical call = 0 HTTP calls; expired entry refetched; test proves it. Dep 2.1. [M]
+- [x] 2.3 Normalized lookup keys: `oem_key` (indexed, normalized) on part and cross-reference; replace broken `oem_number = query` cache check. AC: search "86551-AA000", "86551AA000", "86551 aa000" hit the same cached part. Files: tecdoc_part.py, tecdoc_part_cross_reference.py, db_service.py, tests. Dep 2.2. [M]
+- [x] 2.4 Call budget: per-company monthly cap + counter; hard stop with a clear message; warning at 80%. AC: cap reached -> no HTTP call, message returned; counter resets monthly. Files: settings, wrapper, log. Dep 2.1. [M]
+- [x] 2.5 Lean enrichment: article + cross-refs mandatory, fitment/images/accessories lazy and cached; remove double `action_create_odoo_product` and hard-coded `needs_images`. AC: enriching one SKU = at most 3 logged calls on fixtures. Dep 2.2. [M]
+- [x] 2.6 Read-only search: search no longer creates products, accessories or cross-ref products; explicit "Add to catalog" action. AC: after a search `product.template` count unchanged; button creates exactly one product. Dep 2.5. [M]
+- [x] 2.7 Dedupe + unique constraint `(article_id)`/`(oem_key)` with a migration that merges existing duplicates. AC: install on DB with seeded duplicates merges them. Dep 2.3. [S]
+- [x] 2.8 Security: groups Viewer/Operator/Admin, rewrite `ir.model.access.csv`, record rules, controllers stop using blanket `sudo()`. AC: Viewer cannot write/delete (test per model); Operator can search/enrich; Admin sees settings and budget. [M]
+- [x] 2.9 Replace session-based rate limit with per-user DB-backed limit. AC: new session cannot bypass. Dep 2.1. [S]
+- [x] 2.10 Fix category field, remove the `countryFilterId` assumption (no effect per findings), read `constructionIntervalStart/End` for vehicle dates, `langId` as setting. AC: category differs from name; vehicle date range filled on fixtures. Dep 0.1. [S]
+- [x] 2.11 Bound the data: keep a ranked top-N alternatives set (not hundreds), and filter fitment to the client's makes/models, stored compactly (fixture shows 14,792 cars for one OEM). AC: enriching the Toyota fixture stores <= N alternatives and only matching vehicles. See `docs/api-findings.md`. Dep 2.5. [M]
+### Checkpoint 2 (done 2026-10-10: 51 tests pass, code review + ponytail review fixed, migration check script): one OEM search on fixtures = at most 3 logged calls, repeat = 0; budget stops calls; security tests pass; code-review + security-review run; owner review; merge.
 
 ## Phase 3: Inventory-first enrichment and first n8n flow
 - [ ] 3.1 Stock import parser: `.xlsx`/CSV, encoding detection, header mapping, skips blank rows (the sample export has alternating blank rows), per-row error report, no 100-row cap. AC: parses `Product (product.template).xlsx` to 83 products. Files: new `oem.stock.import` model/wizard + tests. [M]
@@ -77,11 +77,8 @@ Parallel-safe: 3.6 with 3.7; 4.1 with 3b.x; docs and tests alongside features. S
 |---|---|---|
 | Chinese brands (Chery/BYD/Geely/JAC) weakly covered by TecDoc | High | Measure coverage in 0.1/3b.8; fall back to client data and supplier lists; flag as "no catalog data" instead of guessing |
 | `countryFilterId=63` may be the wrong market | Med | Check against fixtures in 0.1 (task 2.10) |
-| Wrapper storage terms unknown | High | Written answer from API author before the first paid client |
+| Wrapper storage terms | Low | Owner confirmed storage is allowed (2026-10-10); keep the written statement |
 | Odoo 19 changes | Low | Keep version-specific code in one place; test on 19 when it ships |
 
 ## Open questions
-- RapidAPI key available for task 0.1 (put in `.env`).
-- Postgres login for the test DB (task 0.2).
-- Git remote: `YousefAlkady/odoo-oem-connect` was not found; correct URL?
 - A sample of client rows with known OEM numbers, for task 3b.8.

@@ -1,0 +1,23 @@
+{
+ "suggested_vin": "WVW!!!1J!XW000001",
+ "error_code": "1,5,14,400",
+ "possible_values": "(4:ABCDFGHJMNPRSTUW)(5:ABCDEF)(6:23468)",
+ "additional_error_text": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,8. Invalid character(s): 9:Z.",
+ "error_text": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+ "vehicle_descriptor": "WVWZZZ1J*XW",
+ "make": "VOLKSWAGEN",
+ "manufacturer_name": "VOLKSWAGEN AG",
+ "model_year": "1999",
+ "plant_city": "WOLFSBURG",
+ "vehicle_type": "PASSENGER CAR",
+ "plant_country": "GERMANY",
+ "bed_type": "Not Applicable",
+ "cab_type": "Not Applicable",
+ "trailer_type_connection": "Not Applicable",
+ "trailer_body_type": "Not Applicable",
+ "bus_floor_configuration_type": "Not Applicable",
+ "bus_type": "Not Applicable",
+ "custom_motorcycle_type": "Not Applicable",
+ "motorcycle_suspension_type": "Not Applicable",
+ "motorcycle_chassis_type": "Not Applicable"
+}
