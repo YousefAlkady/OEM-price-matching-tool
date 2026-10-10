@@ -32,6 +32,29 @@ class ResConfigSettings(models.TransientModel):
         default=30,
         help="How long an API response is reused before it is fetched again."
     )
+    tecdoc_max_alternatives = fields.Integer(
+        string='Alternatives Kept per Search',
+        config_parameter='tecdoc.max_alternatives',
+        default=20,
+        help="An OEM search can return hundreds of aftermarket articles; only this many are kept (articles with images first)."
+    )
+    tecdoc_fitment_makes = fields.Char(
+        string='Vehicle Makes to Keep',
+        config_parameter='tecdoc.fitment_makes',
+        help="Comma-separated makes (e.g. TOYOTA, HYUNDAI, KIA). Compatible vehicles of other makes are not stored. Empty = keep all."
+    )
+    tecdoc_lang_id = fields.Char(
+        string='Catalog Language ID',
+        config_parameter='tecdoc.lang_id',
+        default='4',
+        help="TecDoc language id (4 = English)."
+    )
+    tecdoc_country_filter_id = fields.Char(
+        string='Country Filter ID',
+        config_parameter='tecdoc.country_filter_id',
+        default='63',
+        help="TecDoc country filter for the make/model/engine lists. Tests showed it does not change part fitment results."
+    )
     tecdoc_calls_this_month = fields.Char(string='Calls This Month', compute='_compute_tecdoc_usage')
 
     @api.depends('tecdoc_monthly_call_budget')

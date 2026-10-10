@@ -16,6 +16,20 @@
                             <field name="tecdoc_rapidapi_host"/>
                         </setting>
                     </block>
+                    <block title="Search Results" name="tecdoc_search_settings">
+                        <setting string="Alternatives Kept per Search" help="Only this many aftermarket articles are kept per search (articles with images first)">
+                            <field name="tecdoc_max_alternatives"/>
+                        </setting>
+                        <setting string="Vehicle Makes to Keep" help="Comma-separated makes; other makes' vehicles are not stored. Empty = all">
+                            <field name="tecdoc_fitment_makes" placeholder="TOYOTA, HYUNDAI, KIA, NISSAN"/>
+                        </setting>
+                        <setting string="Catalog Language ID" help="TecDoc language id (4 = English)">
+                            <field name="tecdoc_lang_id"/>
+                        </setting>
+                        <setting string="Country Filter ID" help="Used for the make/model/engine lists">
+                            <field name="tecdoc_country_filter_id"/>
+                        </setting>
+                    </block>
                     <block title="Usage and Cost Control" name="tecdoc_usage_settings">
                         <setting string="Calls This Month" help="Billed RapidAPI calls this month for this company">
                             <field name="tecdoc_calls_this_month"/>

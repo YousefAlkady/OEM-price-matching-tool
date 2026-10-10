@@ -1,0 +1,105 @@
+{
+ "countArticles": 10,
+ "articles": [
+  {
+   "articleId": 72785,
+   "articleNo": "0 986 50A 247",
+   "supplierName": "BOSCH",
+   "supplierId": 30,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": null,
+   "articleMediaFileName": null,
+   "s3image": null
+  },
+  {
+   "articleId": 98199,
+   "articleNo": "0 986 TB2 449",
+   "supplierName": "BOSCH",
+   "supplierId": 30,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPG",
+   "articleMediaFileName": "83e94d822aa794db0e206a68f80c96ff87ebbd65.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/30/83e94d822aa794db0e206a68f80c96ff87ebbd65.webp"
+  },
+  {
+   "articleId": 518679,
+   "articleNo": "05P1379",
+   "supplierName": "LPR",
+   "supplierId": 197,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "4f33ec032027d1c087b436ac40ec0ce92ae8ce17.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/197/4f33ec032027d1c087b436ac40ec0ce92ae8ce17.webp"
+  },
+  {
+   "articleId": 1234530,
+   "articleNo": "13 0460 5747 2",
+   "supplierName": "ATE",
+   "supplierId": 3,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "2c260d318167635389ded9b2eed4c5bf90f2dc80.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/3/2c260d318167635389ded9b2eed4c5bf90f2dc80.webp"
+  },
+  {
+   "articleId": null,
+   "articleNo": "1501224569",
+   "supplierName": "BOSCH",
+   "supplierId": 30,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "23efd7b9ebebac61838ad2ef4dc566f41acee8ff.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/30/23efd7b9ebebac61838ad2ef4dc566f41acee8ff.webp"
+  },
+  {
+   "articleId": 1649067,
+   "articleNo": "181665",
+   "supplierName": "ICER",
+   "supplierId": 158,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "PNG",
+   "articleMediaFileName": "6026c0556cf20aa37f1940197da4e41940f0f909.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/158/6026c0556cf20aa37f1940197da4e41940f0f909.webp"
+  },
+  {
+   "articleId": 2208720,
+   "articleNo": "24024 01",
+   "supplierName": "TEXTAR",
+   "supplierId": 39,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "c8ae574627c3b6f541a0ca34862af0430a7b32ee.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/39/c8ae574627c3b6f541a0ca34862af0430a7b32ee.webp"
+  },
+  {
+   "articleId": 2208727,
+   "articleNo": "2402403",
+   "supplierName": "TEXTAR",
+   "supplierId": 39,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "1ec087e0e197ba69674e46968aaf25bfa0dffe79.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/39/1ec087e0e197ba69674e46968aaf25bfa0dffe79.webp"
+  },
+  {
+   "articleId": 2208730,
+   "articleNo": "2402407",
+   "supplierName": "TEXTAR",
+   "supplierId": 39,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPEG",
+   "articleMediaFileName": "7083a66bb43fecde9eed06435b0da3770d6b4399.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/39/7083a66bb43fecde9eed06435b0da3770d6b4399.webp"
+  },
+  {
+   "articleId": 2477633,
+   "articleNo": "2988 00",
+   "supplierName": "ROADHOUSE",
+   "supplierId": 152,
+   "articleProductName": "Brake Pad Set, disc brake",
+   "articleMediaType": "JPG",
+   "articleMediaFileName": "ea073713aeed5424655797c8c710583a51d1e69c.webp",
+   "s3image": "https://fsn1.your-objectstorage.com/tecdoc2025/media_files/images/152/ea073713aeed5424655797c8c710583a51d1e69c.webp"
+  }
+ ]
+}

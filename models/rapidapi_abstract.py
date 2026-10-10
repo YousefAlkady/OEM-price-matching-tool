@@ -101,6 +101,19 @@ class TecdocApiAbstract(models.AbstractModel):
         })
 
     @api.model
+    def _download_binary(self, url):
+        """Fetch an image file (not an API call, not billed). Returns bytes or None."""
+        try:
+            response = requests.get(url, timeout=10)
+        except requests.exceptions.RequestException as exc:
+            _logger.warning("Image download failed for %s: %s", url, exc)
+            return None
+        if response.status_code != 200:
+            _logger.warning("Image download for %s returned HTTP %s", url, response.status_code)
+            return None
+        return response.content
+
+    @api.model
     def _make_rapidapi_request(self, endpoint, method="GET", payload=None, params=None, use_cache=True):
         key = cache_key(method, endpoint, params, payload)
         Cache = self.env['tecdoc.api.cache'].sudo()
