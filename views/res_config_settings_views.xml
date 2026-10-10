@@ -57,7 +57,7 @@
         <field name="context">{'module' : 'tecdoc_integration'}</field>
     </record>
 
-    <menuitem id="menu_tecdoc_configuration"
+    <menuitem id="menu_tecdoc_configuration" groups="base.group_system"
               name="Configuration"
               parent="menu_tecdoc_root"
               sequence="100"/>

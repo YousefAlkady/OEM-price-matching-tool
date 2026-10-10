@@ -7,6 +7,7 @@
     'license': 'OPL-1',
     'depends': ['base', 'product', 'stock', 'delivery', 'sale', 'website_sale'],
     'data': [
+        'security/security.xml',
         'security/ir.model.access.csv',
         'views/tecdoc_part_views.xml',
         'views/tecdoc_template.xml',

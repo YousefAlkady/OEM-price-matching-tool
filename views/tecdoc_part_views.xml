@@ -46,11 +46,11 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <button name="action_refetch_all_data" string="Refetch &amp; Sync Data" type="object" class="oe_highlight" invisible="article_id == False" help="Re-parses missing OEM numbers, fetches missing alternatives/vehicles, and syncs to Odoo Product."/>
-                    <button name="action_fallback_search_missing_info" string="Deep Search Missing Info" type="object" class="btn-warning" help="If normal fetch failed, tries to find missing info using part number or alternative OEMs." confirm="Are you sure you want to run a deep search? This may use additional RapidAPI credits."/>
-                    <button name="action_create_odoo_product" string="Create Odoo Product" type="object" invisible="product_tmpl_id != False"/>
-                    <button name="action_fetch_cross_references" string="Fetch Alternatives" type="object" invisible="article_id == False"/>
-                    <button name="action_fetch_linked_vehicles" string="Fetch Compatible Vehicles" type="object" invisible="article_id == False"/>
+                    <button name="action_refetch_all_data" string="Refetch &amp; Sync Data" type="object" class="oe_highlight" invisible="article_id == False" help="Re-parses missing OEM numbers, fetches missing alternatives/vehicles, and syncs to Odoo Product." groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fallback_search_missing_info" string="Deep Search Missing Info" type="object" class="btn-warning" help="If normal fetch failed, tries to find missing info using part number or alternative OEMs." confirm="Are you sure you want to run a deep search? This may use additional RapidAPI credits." groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_create_odoo_product" string="Create Odoo Product" type="object" invisible="product_tmpl_id != False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fetch_cross_references" string="Fetch Alternatives" type="object" invisible="article_id == False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fetch_linked_vehicles" string="Fetch Compatible Vehicles" type="object" invisible="article_id == False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -150,7 +150,7 @@
         <field name="view_mode">list,form</field>
     </record>
 
-    <menuitem id="menu_tecdoc_root"
+    <menuitem id="menu_tecdoc_root" groups="rapidapi_bdeel.group_tecdoc_viewer"
               name="TecDoc Parts"
               sequence="10"/>
 

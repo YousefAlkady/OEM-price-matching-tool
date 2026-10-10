@@ -1,9 +1,11 @@
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from datetime import timedelta
+from urllib.parse import urlparse
 
 import requests
 from odoo import models, fields, api
@@ -18,6 +20,10 @@ BURST_RETRY_DELAY = 1.0
 PART_NO_PARAMS = ('articleNo', 'articleOemNo')
 
 DEFAULT_CACHE_TTL_DAYS = 30
+# images are only downloaded from these hosts (and their subdomains); see tecdoc.image_hosts
+DEFAULT_IMAGE_HOSTS = 'your-objectstorage.com'
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+OPERATOR_GROUP = 'rapidapi_bdeel.group_tecdoc_operator'
 DEFAULT_USER_CALLS_PER_MINUTE = 30
 
 
@@ -101,20 +107,44 @@ class TecdocApiAbstract(models.AbstractModel):
         })
 
     @api.model
+    def _image_host_allowed(self, url):
+        parsed = urlparse(url or '')
+        host = (parsed.hostname or '').lower()
+        if parsed.scheme != 'https' or not host:
+            return False
+        raw = self.env['ir.config_parameter'].sudo().get_param('tecdoc.image_hosts', DEFAULT_IMAGE_HOSTS) or ''
+        allowed = [h.strip().lower() for h in raw.split(',') if h.strip()]
+        return any(host == h or host.endswith('.' + h) for h in allowed)
+
+    @api.model
     def _download_binary(self, url):
-        """Fetch an image file (not an API call, not billed). Returns bytes or None."""
+        """Fetch an image file (not an API call, not billed). Returns bytes or None.
+
+        The URL comes from API data, so only https URLs on allow-listed image hosts are fetched,
+        without following redirects and with a size cap.
+        """
+        if not self._image_host_allowed(url):
+            _logger.warning("Refusing image download from a host that is not allow-listed: %s", url)
+            return None
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=10, allow_redirects=False)
         except requests.exceptions.RequestException as exc:
             _logger.warning("Image download failed for %s: %s", url, exc)
             return None
         if response.status_code != 200:
             _logger.warning("Image download for %s returned HTTP %s", url, response.status_code)
             return None
-        return response.content
+        content = response.content
+        if len(content) > MAX_IMAGE_BYTES:
+            _logger.warning("Image %s is larger than %s bytes, skipped", url, MAX_IMAGE_BYTES)
+            return None
+        return content
 
     @api.model
     def _make_rapidapi_request(self, endpoint, method="GET", payload=None, params=None, use_cache=True):
+        # every call may cost money: only operators (or internal sudo code) may trigger it
+        if not self.env.su and not self.env.user.has_group(OPERATOR_GROUP):
+            return _error("forbidden", "You need the OEM Connect Operator role to search the catalog.")
         key = cache_key(method, endpoint, params, payload)
         Cache = self.env['tecdoc.api.cache'].sudo()
 
@@ -125,7 +155,8 @@ class TecdocApiAbstract(models.AbstractModel):
                 return cached
 
         icp = self.env['ir.config_parameter'].sudo()
-        rapidapi_key = icp.get_param('tecdoc.rapidapi_key', '')
+        # an environment variable keeps the key out of the database and its backups
+        rapidapi_key = os.environ.get('TECDOC_RAPIDAPI_KEY') or icp.get_param('tecdoc.rapidapi_key', '')
         rapidapi_host = icp.get_param('tecdoc.rapidapi_host', 'auto-parts-catalog.p.rapidapi.com')
         url = f"https://{rapidapi_host}{endpoint}"
 

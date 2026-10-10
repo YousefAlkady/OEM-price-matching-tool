@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // escape API/user text before it goes into innerHTML
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    const safeUrl = (u) => /^https?:\/\//i.test(String(u || '')) ? esc(u) : '';
     const modeBtns = document.querySelectorAll('.mode-btn');
     const quickSearchUI = document.getElementById('quickSearchUI');
     const vehicleSearchUI = document.getElementById('vehicleSearchUI');
@@ -175,9 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!data) throw new Error("No response received from server");
             if (data.status === 429) {
                 resultsContainer.innerHTML = `<div class="status-message" style="color:#e67e22;">
-                    ⚠️ <strong>Monthly API Quota Exceeded</strong><br><br>
-                    You have used all your RapidAPI requests for this month.<br>
-                    Please <a href="https://rapidapi.com/makingdatameaningful/api/auto-parts-catalog" target="_blank">upgrade your plan</a> to continue searching.
+                    ⚠️ <strong>${esc(data.error || 'Limit reached')}</strong><br><br>
+                    ${esc(data.message || 'The API limit was reached.')}<br>
+                    <a href="https://rapidapi.com/makingdatameaningful/api/auto-parts-catalog" target="_blank" rel="noopener">RapidAPI plans</a>
                 </div>`;
                 return;
             }
@@ -197,10 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const decoder = data.decoder || {};
                 const decoderInfo = decoder.make ? `
                     <table style="margin-top:10px;border-collapse:collapse;width:100%;">
-                        <tr><td style="padding:3px 8px;"><b>Make:</b></td><td>${decoder.make || ''}</td><td style="padding:3px 8px;"><b>Model:</b></td><td>${decoder.model || ''}</td></tr>
-                        <tr><td style="padding:3px 8px;"><b>Year:</b></td><td>${decoder.model_year || ''}</td><td style="padding:3px 8px;"><b>Trim:</b></td><td>${decoder.trim || ''}</td></tr>
-                        <tr><td style="padding:3px 8px;"><b>Engine:</b></td><td>${decoder['displacement_(l)'] ? decoder['displacement_(l)'] + 'L' : ''} ${decoder.engine_configuration || ''} ${decoder.engine_number_of_cylinders ? decoder.engine_number_of_cylinders + '-cyl' : ''}</td><td style="padding:3px 8px;"><b>Fuel:</b></td><td>${decoder['fuel_type_-_primary'] || ''}</td></tr>
-                        <tr><td style="padding:3px 8px;"><b>Country:</b></td><td>${decoder.plant_country || ''}</td><td style="padding:3px 8px;"><b>Type:</b></td><td>${decoder.vehicle_type || ''}</td></tr>
+                        <tr><td style="padding:3px 8px;"><b>Make:</b></td><td>${esc(decoder.make)}</td><td style="padding:3px 8px;"><b>Model:</b></td><td>${esc(decoder.model)}</td></tr>
+                        <tr><td style="padding:3px 8px;"><b>Year:</b></td><td>${esc(decoder.model_year)}</td><td style="padding:3px 8px;"><b>Trim:</b></td><td>${esc(decoder.trim)}</td></tr>
+                        <tr><td style="padding:3px 8px;"><b>Engine:</b></td><td>${esc(decoder['displacement_(l)'] ? decoder['displacement_(l)'] + 'L' : '')} ${esc(decoder.engine_configuration)} ${esc(decoder.engine_number_of_cylinders ? decoder.engine_number_of_cylinders + '-cyl' : '')}</td><td style="padding:3px 8px;"><b>Fuel:</b></td><td>${esc(decoder['fuel_type_-_primary'])}</td></tr>
+                        <tr><td style="padding:3px 8px;"><b>Country:</b></td><td>${esc(decoder.plant_country)}</td><td style="padding:3px 8px;"><b>Type:</b></td><td>${esc(decoder.vehicle_type)}</td></tr>
                     </table>` : '';
 
                 if (manuId) {
@@ -222,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     populateSelect(modelSelect, models, '2. Select Model');
 
                     if (modelId) {
-                        message += `${modelName}`;
+                        message += `${esc(modelName)}`;
                         modelSelect.value = modelId;
                         modelSelect.disabled = false;
 
@@ -230,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         populateSelect(engineSelect, engines, '3. Select Engine');
 
                         if (vehicleId) {
-                            message += ` -> ${vehicleName}</b>`;
+                            message += ` -> ${esc(vehicleName)}</b>`;
                             engineSelect.value = vehicleId;
                             engineSelect.disabled = false;
 
@@ -241,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             message += `</b><br><br><span style="color:var(--text-color); font-weight:normal;">RapidAPI matched the Model, but couldn't identify the exact Engine variant. Please select your Engine manually from the dropdown.</span>`;
                         }
                     } else {
-                        message += `${manuName}</b><br><br><span style="color:var(--text-color); font-weight:normal;">RapidAPI matched the Manufacturer, but couldn't identify the exact Model. Please select your Model manually.</span>`;
+                        message += `${esc(manuName)}</b><br><br><span style="color:var(--text-color); font-weight:normal;">RapidAPI matched the Manufacturer, but couldn't identify the exact Model. Please select your Model manually.</span>`;
                         modelSelect.disabled = false;
                     }
 
@@ -259,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             resultsContainer.innerHTML = `
                 <div class="status-message error-message">
-                    <strong>Error:</strong> ${error.message}
+                    <strong>Error:</strong> ${esc(error.message)}
                 </div>
             `;
         } finally {
@@ -332,20 +335,20 @@ document.addEventListener('DOMContentLoaded', () => {
             imagesHtml = '<div class="images-gallery" style="display:flex;gap:1rem;overflow-x:auto;margin-bottom:1.5rem;padding-bottom:0.5rem;">';
             images.forEach(img => {
                 const url = img.imageURL800 || img.imageURL400 || img.imageURL || img.url || img.imageURL200 || (typeof img === 'string' ? img : '');
-                if (url) imagesHtml += `<img src="${url}" alt="Part Image" style="height:160px;border-radius:0.5rem;object-fit:cover;border:1px solid var(--border-color);box-shadow:0 4px 6px rgba(0,0,0,0.3);"/>`;
+                if (safeUrl(url)) imagesHtml += `<img src="${safeUrl(url)}" alt="Part Image" style="height:160px;border-radius:0.5rem;object-fit:cover;border:1px solid var(--border-color);box-shadow:0 4px 6px rgba(0,0,0,0.3);"/>`;
             });
             imagesHtml += '</div>';
         }
 
         let detailsHtml = '<div class="details-grid">';
-        if (item.status) detailsHtml += `<div class="detail-item"><span class="detail-label">Status</span><span class="detail-value">${item.status}</span></div>`;
-        if (item.eanNumber || item.ean) detailsHtml += `<div class="detail-item"><span class="detail-label">EAN Number</span><span class="detail-value">${item.eanNumber || item.ean}</span></div>`;
+        if (item.status) detailsHtml += `<div class="detail-item"><span class="detail-label">Status</span><span class="detail-value">${esc(item.status)}</span></div>`;
+        if (item.eanNumber || item.ean) detailsHtml += `<div class="detail-item"><span class="detail-label">EAN Number</span><span class="detail-value">${esc(item.eanNumber || item.ean)}</span></div>`;
         detailsHtml += '</div>';
 
         const rawJson = JSON.stringify(item, null, 2);
         const internalArticleId = item.articleId || item.id || item.legacyArticleId || '';
         const alternativeBtn = internalArticleId
-            ? `<button class="btn-secondary" onclick="window.findAlternatives('${internalArticleId}')">
+            ? `<button class="btn-secondary js-find-alternatives" data-article-id="${esc(internalArticleId)}">
                 <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.5 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L11 2.707V14.5a.5.5 0 0 0 .5.5zm-7-14a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L4 13.293V1.5a.5.5 0 0 1 .5-.5z"/></svg>
                 Find Alternatives
                </button>`
@@ -353,8 +356,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.innerHTML = `
             <div class="result-header">
-                <div class="brand-name">${brand} - ${genericName}</div>
-                <div class="article-no"># ${articleNo}</div>
+                <div class="brand-name">${esc(brand)} - ${esc(genericName)}</div>
+                <div class="article-no"># ${esc(articleNo)}</div>
             </div>
             ${imagesHtml}
             ${detailsHtml}
@@ -364,9 +367,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/></svg>
                     View Raw Data Payload
                 </summary>
-                <pre>${rawJson}</pre>
+                <pre>${esc(rawJson)}</pre>
             </details>
         `;
+        const altBtn = card.querySelector('.js-find-alternatives');
+        if (altBtn) altBtn.addEventListener('click', () => window.findAlternatives(altBtn.dataset.articleId));
         return card;
     }
 

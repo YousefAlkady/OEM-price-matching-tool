@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import re
 
 from odoo import models, fields, api
 from odoo.exceptions import UserError
@@ -23,6 +24,10 @@ ARTICLE_TYPES = {
 # only a bounded, ranked set is kept
 DEFAULT_MAX_ALTERNATIVES = 20
 DEFAULT_MAX_VEHICLES = 300
+MAX_QUERY_LENGTH = 64
+# values are pasted into API URL paths, so they must match these shapes exactly
+VIN_RE = re.compile(r'^[A-HJ-NPR-Z0-9]{11,17}$')
+ID_RE = re.compile(r'^[0-9]{1,12}$')
 
 
 def _xref_endpoint(article_id, lang_id):
@@ -92,22 +97,22 @@ class TecdocPart(models.Model):
     @api.model
     def search_catalog(self, search_type, query=None, **kwargs):
         api_model = self._api()
+        if not self.env.su and not self.env.user.has_group('rapidapi_bdeel.group_tecdoc_operator'):
+            return {"status": 403, "error": "Forbidden", "message": "You need the OEM Connect Operator role to search the catalog.", "data": []}
+        invalid = self._validate_search(search_type, query, kwargs)
+        if invalid:
+            return {"status": 400, "error": "Bad Request", "message": invalid, "data": []}
+        query = query.strip() if isinstance(query, str) else query
         billed_before = api_model.get_monthly_usage()[0]
         lang_id = self._lang_id()
 
         if search_type == 'vin':
-            if not query:
-                return {"status": 400, "error": "Bad Request", "message": "A VIN is required", "data": []}
-            return self._vin_lookup(query)
+            return self._vin_lookup(query.upper())
 
         if search_type in ARTICLE_TYPES:
-            if not query:
-                return {"status": 400, "error": "Bad Request", "message": "A search number is required", "data": []}
             data = api_model._make_rapidapi_request(SEARCH_ENDPOINT, params={
                 "langId": lang_id, "articleNo": query, "articleType": ARTICLE_TYPES[search_type]})
         elif search_type == 'alternatives':
-            if not query:
-                return {"status": 400, "error": "Bad Request", "message": "Article ID is required for alternatives search", "data": []}
             data = api_model._make_rapidapi_request(_xref_endpoint(query, lang_id))
         elif search_type == 'exact_vehicle':
             payload = {"typeId": "1", "langId": lang_id, "vehicleId": kwargs.get('vehicle_id')}
@@ -157,12 +162,34 @@ class TecdocPart(models.Model):
         }
 
     @staticmethod
+    def _validate_search(search_type, query, kwargs):
+        """Return an error message if the search input is not acceptable, else None."""
+        if search_type == 'exact_vehicle':
+            if not ID_RE.match(str(kwargs.get('vehicle_id') or '')):
+                return "A numeric vehicle id is required"
+            if kwargs.get('category_id') and not ID_RE.match(str(kwargs['category_id'])):
+                return "The category id must be numeric"
+            return None
+        if not isinstance(query, str) or not query.strip():
+            return "A search value is required"
+        query = query.strip()
+        if len(query) > MAX_QUERY_LENGTH:
+            return f"The search value is longer than {MAX_QUERY_LENGTH} characters"
+        if search_type == 'vin' and not VIN_RE.match(query.upper()):
+            return "That is not a valid VIN (11 to 17 letters and digits, no I, O or Q)"
+        if search_type == 'alternatives' and not ID_RE.match(query):
+            return "Article ID must be numeric"
+        return None
+
+    @staticmethod
     def _error_result(data):
         message = data.get("message", data.get("error", "Unknown error"))
         if data.get("error") in ("quota_exceeded", "budget_exceeded"):
             return {"status": 429, "error": "Monthly quota exceeded", "message": message, "data": []}
         if data.get("error") == "rate_limit":
             return {"status": 429, "error": "Too Many Requests", "message": message, "data": []}
+        if data.get("error") == "forbidden":
+            return {"status": 403, "error": "Forbidden", "message": message, "data": []}
         return {"status": 500, "error": "API Request Failed", "message": message, "data": []}
 
     @staticmethod

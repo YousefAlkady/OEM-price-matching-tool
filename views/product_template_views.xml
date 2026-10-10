@@ -17,8 +17,8 @@
             <xpath expr="//page[@name='general_information']" position="inside">
                 <group string="TecDoc Information">
                     <group>
-                        <button name="action_refetch_tecdoc_data" string="Update &amp; Refetch TecDoc Data" type="object" class="btn-primary" style="margin-bottom:10px; margin-right:10px;" icon="fa-refresh" invisible="not tecdoc_part_id"/>
-                        <button name="action_fallback_search_missing_info" type="object" string="Deep Search Missing Info" class="btn-warning" style="margin-bottom:10px;" icon="fa-search-plus" confirm="Are you sure you want to run a deep search?"/>
+                        <button name="action_refetch_tecdoc_data" string="Update &amp; Refetch TecDoc Data" type="object" class="btn-primary" style="margin-bottom:10px; margin-right:10px;" icon="fa-refresh" invisible="not tecdoc_part_id" groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                        <button name="action_fallback_search_missing_info" type="object" string="Deep Search Missing Info" class="btn-warning" style="margin-bottom:10px;" icon="fa-search-plus" confirm="Are you sure you want to run a deep search?" groups="rapidapi_bdeel.group_tecdoc_operator"/>
                     </group>
                     <group>
                         <field name="tecdoc_brand" readonly="1"/>
