@@ -1,12 +1,13 @@
 {
     'name': 'Odoo OEM Connect',
-    'version': '18.0.1.1.0',
+    'version': '18.0.1.2.0',
     'category': 'Sales',
     'summary': 'Integration with TecDoc RapidAPI',
     'author': 'Bdeel',
     'license': 'OPL-1',
     'depends': ['base', 'product', 'stock', 'delivery', 'sale', 'website_sale'],
     'data': [
+        'security/security.xml',
         'security/ir.model.access.csv',
         'views/tecdoc_part_views.xml',
         'views/tecdoc_template.xml',

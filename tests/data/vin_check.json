@@ -1,0 +1,69 @@
+{
+ "data": {
+  "dataSource": [
+   {
+    "dataSourceKey": "vin_filter"
+   }
+  ],
+  "matchingModels": {
+   "array": [
+    {
+     "manuId": 121,
+     "modelId": 1994,
+     "modelName": "GOLF IV (1J1)"
+    },
+    {
+     "manuId": 121,
+     "modelId": 1995,
+     "modelName": "GOLF IV Variant (1J5)"
+    },
+    {
+     "manuId": 121,
+     "modelId": 3884,
+     "modelName": "BORA I (1J2)"
+    }
+   ]
+  },
+  "matchingVehicles": {
+   "array": [
+    {
+     "manuId": 121,
+     "carName": "VW GOLF IV (1J1) 1.9 TDI",
+     "modelId": 1994,
+     "vehicleId": 8456,
+     "linkageTargetType": "P",
+     "subLinkageTargetType": "V",
+     "vehicleTypeDescription": "1.9 TDI"
+    },
+    {
+     "manuId": 121,
+     "carName": "VW GOLF IV (1J1) 1.6",
+     "modelId": 1994,
+     "vehicleId": 8460,
+     "linkageTargetType": "P",
+     "subLinkageTargetType": "V",
+     "vehicleTypeDescription": "1.6"
+    },
+    {
+     "manuId": 121,
+     "carName": "VW GOLF IV (1J1) 1.9 TDI",
+     "modelId": 1994,
+     "vehicleId": 8461,
+     "linkageTargetType": "P",
+     "subLinkageTargetType": "V",
+     "vehicleTypeDescription": "1.9 TDI"
+    }
+   ]
+  },
+  "matchingManufacturers": {
+   "array": [
+    {
+     "manuId": 121,
+     "manuName": "VW"
+    }
+   ]
+  },
+  "matchingVehiclesCount": 50
+ },
+ "status": 200
+}

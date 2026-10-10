@@ -20,7 +20,7 @@ Business model: pay-per-call TecDoc via a RapidAPI wrapper, enrich only the clie
   - Consequence: the current 0.5 s sleep is unnecessary at 15 req/s; the real constraint is the monthly hard limit. Basic's 100 calls means development must use recorded fixtures.
   - Consequence: one client with 5,000 SKUs fits Pro at 3 calls/SKU (15,000 calls) but needs Ultra at the current ~10 calls/SKU.
   - Decision: each client holds their own RapidAPI subscription and key (they pay the plan; we sell the platform). Reselling shared API access risks breaching RapidAPI's acceptable-use policy.
-- **D3:** unknown. Action: ask the API provider (see message draft in the session) before the first paid client.
+- **D3:** answered 2026-10-10: the API owner stated that storing results is allowed. Keep a copy of that written statement with the client contract. Cache TTL (default 30 days) is now only about data freshness, not licensing.
 - **D4:** client hosts Odoo on their own server; we develop locally and ship. Deliverable = installable module + Docker Compose for optional n8n + install guide. No pgvector assumptions in the core module.
 - **D5:** open. Desired part record ("part passport"): client internal reference mapped to international OEM number, plus images, compatible vehicles and alternative parts with their info. Open question: does the client's stock list contain OEM or brand numbers, or only internal codes and names? This decides how hard the mapping step is.
 

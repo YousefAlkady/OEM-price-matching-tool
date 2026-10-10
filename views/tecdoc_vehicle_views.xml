@@ -4,13 +4,13 @@
         <field name="name">tecdoc.vehicle.tree</field>
         <field name="model">tecdoc.vehicle</field>
         <field name="arch" type="xml">
-            <tree>
+            <list>
                 <field name="brand"/>
                 <field name="vehicle_model"/>
                 <field name="type"/>
                 <field name="vin"/>
                 <field name="make_date"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -45,11 +45,11 @@
                     <notebook>
                         <page string="Compatible Parts">
                             <field name="part_ids">
-                                <tree>
+                                <list>
                                     <field name="brand"/>
                                     <field name="part_number"/>
                                     <field name="name"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                     </notebook>

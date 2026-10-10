@@ -28,7 +28,7 @@
         <field name="target">new</field>
     </record>
 
-    <menuitem id="menu_tecdoc_import_wizard"
+    <menuitem id="menu_tecdoc_import_wizard" groups="rapidapi_bdeel.group_tecdoc_operator"
               name="Batch Import"
               parent="menu_tecdoc_root"
               action="action_tecdoc_import_wizard"

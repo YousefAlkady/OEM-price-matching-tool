@@ -1,11 +1,40 @@
-import logging
-import json
 import base64
-import requests
+import json
+import logging
+import re
+
+import psycopg2
 from odoo import models, fields, api
 from odoo.exceptions import UserError
+from odoo.tools.image import image_process
+
+from .compat import unique_constraint
+from .rapidapi_abstract import normalize_part_no
 
 _logger = logging.getLogger(__name__)
+
+SEARCH_ENDPOINT = "/artlookup/search-articles-by-article-no"
+COMPAT_ENDPOINT = "/articles/get-compatible-cars-by-oem-no/type-id/1"
+SPECS_ENDPOINT = "/articles/get-article-specifications-list-of-articles-ids"
+ARTICLE_TYPES = {
+    'part_number': 'ArticleNumber',
+    'oem_number': 'OENumber',
+    'engine_code': 'EngineCode',
+    'text': 'ArticleNumber',
+}
+# an OEM search returns every aftermarket article that references the OEM (hundreds);
+# only a bounded, ranked set is kept
+DEFAULT_MAX_ALTERNATIVES = 20
+DEFAULT_MAX_VEHICLES = 300
+MAX_QUERY_LENGTH = 64
+# values are pasted into API URL paths, so they must match these shapes exactly
+VIN_RE = re.compile(r'^[A-HJ-NPR-Z0-9]{11,17}$')
+ID_RE = re.compile(r'^[0-9]{1,12}$')
+
+
+def _xref_endpoint(article_id, lang_id):
+    return f"/artlookup/select-article-cross-references/article-id/{article_id}/lang-id/{lang_id}"
+
 
 class TecdocPart(models.Model):
     _name = 'tecdoc.part'
@@ -13,7 +42,10 @@ class TecdocPart(models.Model):
 
     name = fields.Char(string='Name/Description', required=True)
     part_number = fields.Char(string='Part Number', index=True, required=True)
+    part_number_key = fields.Char(string='Normalized Part Number', compute='_compute_part_number_key', store=True, index=True)
     oem_number = fields.Text(string='OEM Number')
+    oem_keys = fields.Char(string='Normalized OEM Numbers', compute='_compute_oem_keys', store=True, index=True,
+                           help="Comma-wrapped normalized OEM numbers, e.g. ',044650K090,', for exact matching.")
     brand = fields.Char(string='Brand')
     vehicle_model = fields.Char(string='Vehicle Model')
     vin = fields.Char(string='VIN', index=True)
@@ -24,10 +56,9 @@ class TecdocPart(models.Model):
     hs_code = fields.Char(string='HS Code')
     barcode = fields.Char(string='Barcode (EAN)')
     specs_text = fields.Text(string='Specifications')
-    accessories_raw = fields.Text(string='Accessories Raw JSON')
     article_id = fields.Char(string='TecDoc Article ID', index=True)
     active = fields.Boolean(default=True)
-    raw_data = fields.Text(string='Raw API Data')  # cached json to avoid re-fetching
+    raw_data = fields.Text(string='Raw API Data')
 
     # relationships
     image_ids = fields.One2many('tecdoc.part.image', 'part_id', string='Images')
@@ -35,12 +66,268 @@ class TecdocPart(models.Model):
     cross_reference_ids = fields.One2many('tecdoc.part.cross_reference', 'part_id', string='Alternative OEMs')
     product_tmpl_id = fields.Many2one('product.template', string='Odoo Product', help='Linked Odoo E-commerce Product')
 
+    _sql_constraints = [
+        unique_constraint('article_id_unique', 'article_id', 'This TecDoc article is already saved as a part.'),
+    ]
+
+    @api.depends('oem_number')
+    def _compute_oem_keys(self):
+        for rec in self:
+            keys = sorted({normalize_part_no(o) for o in (rec.oem_number or '').split(',') if normalize_part_no(o)})
+            rec.oem_keys = f",{','.join(keys)}," if keys else False
+
+    @api.depends('part_number')
+    def _compute_part_number_key(self):
+        for rec in self:
+            rec.part_number_key = normalize_part_no(rec.part_number)
+
     def unlink(self):
         for record in self:
             if record.product_tmpl_id:
                 record.product_tmpl_id.tecdoc_part_id = False
-        return super(TecdocPart, self).unlink()
+        return super().unlink()
 
+    # ------------------------------------------------------------------
+    # settings helpers
+    # ------------------------------------------------------------------
+    def _api(self):
+        return self.env['tecdoc.api.abstract']
+
+    def _lang_id(self):
+        return self.env['ir.config_parameter'].sudo().get_param('tecdoc.lang_id', '4')
+
+    def _fitment_makes(self):
+        raw = self.env['ir.config_parameter'].sudo().get_param('tecdoc.fitment_makes', '') or ''
+        return {m.strip().upper() for m in raw.split(',') if m.strip()}
+
+    # ------------------------------------------------------------------
+    # catalog search (used by the /api/tecdoc/search controller)
+    # ------------------------------------------------------------------
+    @api.model
+    def search_catalog(self, search_type, query=None, **kwargs):
+        self = self.with_context(tecdoc_interactive=True)
+        api_model = self._api()
+        if not self.env.su and not self.env.user.has_group('rapidapi_bdeel.group_tecdoc_operator'):
+            return {"status": 403, "error": "Forbidden", "message": "You need the OEM Connect Operator role to search the catalog.", "data": []}
+        invalid = self._validate_search(search_type, query, kwargs)
+        if invalid:
+            return {"status": 400, "error": "Bad Request", "message": invalid, "data": []}
+        query = query.strip() if isinstance(query, str) else query
+        billed_before = api_model.get_monthly_usage()[0]
+        lang_id = self._lang_id()
+
+        if search_type == 'vin':
+            return self._vin_lookup(query.upper())
+
+        if search_type in ARTICLE_TYPES:
+            data = api_model._make_rapidapi_request(SEARCH_ENDPOINT, params={
+                "langId": lang_id, "articleNo": query, "articleType": ARTICLE_TYPES[search_type]})
+        elif search_type == 'alternatives':
+            data = api_model._make_rapidapi_request(_xref_endpoint(query, lang_id))
+        elif search_type == 'exact_vehicle':
+            payload = {"typeId": "1", "langId": lang_id, "vehicleId": kwargs.get('vehicle_id')}
+            if kwargs.get('category_id'):
+                payload["categoryId"] = kwargs.get('category_id')
+            data = api_model._make_rapidapi_request("/articles/list-articles", method="POST", payload=payload)
+        else:
+            return {"status": 400, "error": "Bad Request", "message": f"Invalid search_type: {search_type}", "data": []}
+
+        if isinstance(data, dict) and "error" in data:
+            return self._error_result(data)
+
+        articles = self._bound_articles(self._extract_articles(data))
+
+        fitment = {}
+        if articles and search_type in ('oem_number', 'part_number', 'engine_code'):
+            fitment = self._fetch_fitment(query)
+
+        extra_vehicle = None
+        if search_type == 'exact_vehicle' and kwargs.get('vehicle_id'):
+            extra_vehicle = self.env['tecdoc.vehicle'].upsert_from_cars([{
+                'vehicleId': kwargs.get('vehicle_id'),
+                'carName': kwargs.get('vehicle_name') or '',
+            }]).get(str(kwargs.get('vehicle_id')))
+
+        parts = self._save_articles(articles, oem_number=query if search_type == 'oem_number' else None,
+                                    fitment=fitment, extra_vehicle=extra_vehicle)
+
+        if search_type == 'part_number' and parts:
+            # one extra call: alternatives of the best match
+            parts[:1].action_fetch_cross_references(notify=False)
+
+        vehicles = []
+        seen = set()
+        for cars in fitment.values():
+            for car in cars:
+                vid = str(car.get('vehicleId'))
+                if vid not in seen:
+                    seen.add(vid)
+                    vehicles.append(car)
+
+        return {
+            "status": 200,
+            "data": articles,
+            "compatible_vehicles": vehicles[:DEFAULT_MAX_VEHICLES],
+            "cached": api_model.get_monthly_usage()[0] == billed_before,
+        }
+
+    @staticmethod
+    def _validate_search(search_type, query, kwargs):
+        """Return an error message if the search input is not acceptable, else None."""
+        if search_type == 'exact_vehicle':
+            if not ID_RE.match(str(kwargs.get('vehicle_id') or '')):
+                return "A numeric vehicle id is required"
+            if kwargs.get('category_id') and not ID_RE.match(str(kwargs['category_id'])):
+                return "The category id must be numeric"
+            return None
+        if not isinstance(query, str) or not query.strip():
+            return "A search value is required"
+        query = query.strip()
+        if len(query) > MAX_QUERY_LENGTH:
+            return f"The search value is longer than {MAX_QUERY_LENGTH} characters"
+        if search_type == 'vin' and not VIN_RE.match(query.upper()):
+            return "That is not a valid VIN (11 to 17 letters and digits, no I, O or Q)"
+        if search_type == 'alternatives' and not ID_RE.match(query):
+            return "Article ID must be numeric"
+        return None
+
+    @staticmethod
+    def _error_result(data):
+        message = data.get("message", data.get("error", "Unknown error"))
+        if data.get("error") in ("quota_exceeded", "budget_exceeded"):
+            return {"status": 429, "error": "Monthly quota exceeded", "message": message, "data": []}
+        if data.get("error") == "rate_limit":
+            return {"status": 429, "error": "Too Many Requests", "message": message, "data": []}
+        if data.get("error") == "forbidden":
+            return {"status": 403, "error": "Forbidden", "message": message, "data": []}
+        return {"status": 500, "error": "API Request Failed", "message": message, "data": []}
+
+    @staticmethod
+    def _extract_articles(data):
+        articles = data.get('articles') if isinstance(data, dict) else data
+        return [a for a in (articles or []) if isinstance(a, dict)]
+
+    def _bound_articles(self, articles):
+        limit = self._api()._get_int_param('tecdoc.max_alternatives', DEFAULT_MAX_ALTERNATIVES)
+        unique, seen = [], set()
+        for art in articles:
+            art_id = art.get('articleId') or art.get('articleNo')
+            if art_id in seen:
+                continue
+            seen.add(art_id)
+            unique.append(art)
+        # stable sort: articles with an image first, API order otherwise
+        unique.sort(key=lambda a: not a.get('s3image'))
+        return unique[:limit] if limit else unique
+
+    def _fetch_fitment(self, number):
+        """Compatible cars per article for one OEM/article number, filtered to the configured makes."""
+        data = self._api()._make_rapidapi_request(COMPAT_ENDPOINT, params={
+            "langId": self._lang_id(), "articleOemNo": number})
+        if not isinstance(data, dict) or 'error' in data:
+            return {}
+        makes = self._fitment_makes()
+        fitment = {}
+        for art in data.get('articles') or []:
+            cars, seen = [], set()
+            for car in art.get('compatibleCars') or []:
+                vid = str(car.get('vehicleId', ''))
+                if not vid or vid == 'None' or vid in seen:
+                    continue
+                if makes and str(car.get('manufacturerName', '')).upper() not in makes:
+                    continue
+                seen.add(vid)
+                cars.append(car)
+            if cars:
+                fitment[str(art.get('articleId'))] = cars[:DEFAULT_MAX_VEHICLES]
+        return fitment
+
+    def _article_vals(self, article):
+        product_type = article.get('articleProductName') or ''
+        supplier = article.get('supplierName') or article.get('brandName') or ''
+        number = article.get('articleNo') or article.get('articleSearchNo') or ''
+        name = " ".join(p for p in (supplier, number) if p)
+        if product_type:
+            name = f"{name} - {product_type}" if name else product_type
+        return {
+            'name': name or 'Unknown Part',
+            'part_number': number,
+            'brand': supplier,
+            'article_id': str(article.get('articleId') or '') or False,
+            'category': product_type,
+            'raw_data': json.dumps(article),
+        }
+
+    def _save_articles(self, articles, oem_number=None, fitment=None, extra_vehicle=None):
+        fitment = fitment or {}
+        Vehicle = self.env['tecdoc.vehicle']
+        vehicles_by_id = Vehicle.upsert_from_cars([car for cars in fitment.values() for car in cars])
+
+        article_ids = [str(a.get('articleId')) for a in articles if a.get('articleId')]
+        # include archived parts: article_id is unique across active and archived records
+        existing = {p.article_id: p for p in self.with_context(active_test=False).search(
+            [('article_id', 'in', article_ids)])} if article_ids else {}
+
+        saved = self.browse()
+        for article in articles:
+            vals = self._article_vals(article)
+            if not vals['part_number']:
+                continue
+            part = existing.get(vals['article_id'])
+            if oem_number:
+                current = [o.strip() for o in (part.oem_number or '').split(',') if o.strip()] if part else []
+                if normalize_part_no(oem_number) not in {normalize_part_no(o) for o in current}:
+                    current.append(oem_number)
+                vals['oem_number'] = ", ".join(current)
+            if part:
+                part.write(vals)
+            else:
+                part = self._create_unless_taken(vals)
+                if not part:
+                    continue
+
+            vehicle_ids = [vehicles_by_id[str(c.get('vehicleId'))].id
+                           for c in fitment.get(vals['article_id'] or '', []) if str(c.get('vehicleId')) in vehicles_by_id]
+            if extra_vehicle:
+                vehicle_ids.append(extra_vehicle.id)
+            if vehicle_ids:
+                part.vehicle_ids = [(4, vid) for vid in vehicle_ids]
+
+            url = article.get('s3image')
+            if url and url not in part.image_ids.mapped('image_url'):
+                self.env['tecdoc.part.image'].create({
+                    'name': article.get('articleMediaFileName') or 'image',
+                    'part_id': part.id,
+                    'image_url': url,
+                })
+            saved |= part
+        return saved
+
+    def _create_unless_taken(self, vals):
+        """Create a part; if a parallel request saved the same article first, skip it here."""
+        try:
+            with self.env.cr.savepoint():
+                return self.create(vals)
+        except psycopg2.errors.UniqueViolation:
+            _logger.info("Article %s was saved by a parallel request; skipped in this one", vals.get('article_id'))
+            return self.browse()
+
+    def _vin_lookup(self, vin):
+        api_model = self._api()
+        data = api_model._make_rapidapi_request(f"/vin/tecdoc-vin-check/{vin}")
+        if isinstance(data, dict) and "error" in data:
+            return self._error_result(data)
+        inner = data.get('data', {}) if isinstance(data, dict) else {}
+
+        decoder = api_model._make_rapidapi_request(f"/vin/decoder-v2/{vin}")
+        decoder_data = decoder if isinstance(decoder, dict) and 'error' not in decoder else {}
+
+        self.env['tecdoc.vehicle'].save_from_vin(vin, inner, decoder_data)
+        return {"status": 200, "data": inner, "decoder": decoder_data, "cached": False}
+
+    # ------------------------------------------------------------------
+    # record actions (buttons)
+    # ------------------------------------------------------------------
     def action_view_odoo_product(self):
         self.ensure_one()
         if self.product_tmpl_id:
@@ -52,50 +339,177 @@ class TecdocPart(models.Model):
                 'res_id': self.product_tmpl_id.id,
             }
 
-    def action_create_odoo_product(self):
-        for record in self:
-            desc = record.category or ""
-            brand_part = record.brand or ""
-            name_part = record.name or ""
-            if brand_part and brand_part.lower() not in ("unknown brand", "unknown"):
-                product_name = f"{brand_part} - {name_part}"
-            else:
-                product_name = name_part or brand_part or record.part_number
+    def _notify(self, title, message, kind='danger'):
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': title, 'message': message, 'type': kind}}
 
-            product_vals = {
-                'name': product_name,
+    def action_fetch_cross_references(self, notify=True):
+        CrossRef = self.env['tecdoc.part.cross_reference']
+        lang_id = self._lang_id()
+        for record in self:
+            if not record.article_id:
+                continue
+            data = self._api()._make_rapidapi_request(_xref_endpoint(record.article_id, lang_id))
+            if isinstance(data, dict) and 'error' in data:
+                if notify:
+                    return self._notify('API Error', data['message'])
+                continue
+            known = set(record.cross_reference_ids.mapped('oem_number'))
+            for cross in self._bound_articles(self._extract_articles(data)):
+                number = cross.get('articleNo')
+                brand = cross.get('supplierName') or ''
+                if number and number not in known:
+                    CrossRef.create({'part_id': record.id, 'oem_number': number, 'brand': brand})
+                    known.add(number)
+        if notify:
+            return {'type': 'ir.actions.client', 'tag': 'reload'}
+
+    def action_fetch_linked_vehicles(self):
+        Vehicle = self.env['tecdoc.vehicle']
+        for record in self:
+            numbers = [o.strip() for o in (record.oem_number or '').split(',') if o.strip()] or [record.part_number]
+            fitment = self._fetch_fitment(numbers[0]) if numbers[0] else {}
+            cars = fitment.get(record.article_id or '') or [c for cs in fitment.values() for c in cs]
+            vehicles = Vehicle.upsert_from_cars(cars[:DEFAULT_MAX_VEHICLES])
+            if vehicles:
+                record.vehicle_ids = [(4, v.id) for v in vehicles.values()]
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
+
+    def action_refetch_all_data(self):
+        self._reparse_raw_data()
+        self.action_fetch_cross_references(notify=False)
+        self.action_fetch_linked_vehicles()
+        self.action_create_odoo_product()
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
+
+    def action_fallback_search_missing_info(self):
+        """Find catalog data for parts that only have a part number (e.g. imported or pending)."""
+        lang_id = self._lang_id()
+        for record in self:
+            candidates = [record.part_number] + record.cross_reference_ids.mapped('oem_number')
+            for candidate in filter(None, candidates):
+                data = self._api()._make_rapidapi_request(SEARCH_ENDPOINT, params={
+                    "langId": lang_id, "articleNo": candidate, "articleType": "ArticleNumber"})
+                if isinstance(data, dict) and 'error' in data:
+                    return self._notify('API Error', data['message'])
+                articles = self._bound_articles(self._extract_articles(data))
+                if not articles:
+                    continue
+                vals = self._article_vals(articles[0])
+                update = {k: v for k, v in vals.items()
+                          if k in ('brand', 'category', 'raw_data') or not record[k]
+                          or (k == 'name' and 'Pending Fetch' in (record.name or ''))}
+                update.pop('part_number', None)
+                if vals['article_id'] and self.with_context(active_test=False).search_count(
+                        [('article_id', '=', vals['article_id']), ('id', '!=', record.id)]):
+                    _logger.info("Article %s already saved as another part; not reassigning", vals['article_id'])
+                    update.pop('article_id', None)
+                if not record.oem_number:
+                    update['oem_number'] = candidate
+                record.write(update)
+                url = articles[0].get('s3image')
+                if url and url not in record.image_ids.mapped('image_url'):
+                    self.env['tecdoc.part.image'].create({'name': 'image', 'part_id': record.id, 'image_url': url})
+                if not record.vehicle_ids:
+                    record.action_fetch_linked_vehicles()
+                break
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
+
+    def _reparse_raw_data(self):
+        for record in self:
+            if not record.raw_data:
+                continue
+            try:
+                vals = self._article_vals(json.loads(record.raw_data))
+            except (ValueError, TypeError) as exc:
+                _logger.warning("Could not re-parse raw data for %s: %s", record.part_number, exc)
+                continue
+            record.write({k: vals[k] for k in ('name', 'brand', 'category') if vals[k]})
+
+    def _fetch_specs(self):
+        ids = [int(r.article_id) for r in self if r.article_id and r.article_id.isdigit()]
+        if not ids:
+            return
+        data = self._api()._make_rapidapi_request(SPECS_ENDPOINT, method="POST",
+                                                  payload={"langId": int(self._lang_id()), "articleIds": ids})
+        if not isinstance(data, dict) or 'articles' not in data:
+            return
+        specs_map = {str(a.get('articleId')): a.get('allSpecifications') or [] for a in data['articles']}
+        for record in self:
+            specs = specs_map.get(record.article_id)
+            if not specs:
+                continue
+            vals, lines = {}, []
+            for spec in specs:
+                name_raw = str(spec.get('criteriaName', ''))
+                val_raw = str(spec.get('criteriaValue', ''))
+                if name_raw and val_raw:
+                    lines.append(f"• {name_raw}: {val_raw}")
+                name, val_str = name_raw.lower(), val_raw.replace(',', '.')
+                try:
+                    if 'weight' in name:
+                        vals['weight'] = float(val_str)
+                    elif 'volume' in name:
+                        vals['volume'] = float(val_str)
+                    elif 'customs tariff number' in name or 'hs code' in name:
+                        vals['hs_code'] = val_str
+                    elif 'ean' in name or 'barcode' in name:
+                        vals['barcode'] = val_raw
+                except ValueError:
+                    pass
+            if lines:
+                vals['specs_text'] = "Specifications:\n" + "\n".join(lines)
+            record.write(vals)
+
+    def _ensure_images_downloaded(self):
+        for img in self.mapped('image_ids').filtered(lambda i: i.image_url and not i.image):
+            content = self._api()._download_binary(img.image_url)
+            if not content:
+                continue
+            try:
+                image_process(content, verify_resolution=True)
+            except (UserError, ValueError, OSError) as exc:
+                _logger.warning("Skipping unreadable image %s: %s", img.image_url, exc)
+                continue
+            img.image = base64.b64encode(content)
+
+    def action_create_odoo_product(self):
+        """Add to catalog: create or update the Odoo product. Only links products that already exist."""
+        ProductTmpl = self.env['product.template']
+        self.filtered(lambda r: not r.specs_text)._fetch_specs()
+        for record in self:
+            record._ensure_images_downloaded()
+            vals = {
+                'name': record.name or record.part_number,
                 'default_code': record.part_number,
                 'type': 'consu',
                 'is_storable': True,
-                'description': desc,
-                'tecdoc_brand': record.brand,
-                'tecdoc_article_number': record.part_number,
-                'tecdoc_oem_number': record.oem_number,
+                'description': record.category or "",
                 'tecdoc_part_id': record.id,
                 'weight': record.weight,
                 'volume': record.volume,
-                'hs_code': record.hs_code,
-                'barcode': record.barcode,
                 'description_sale': record.specs_text,
                 'description_purchase': f"TecDoc Brand: {record.brand}\nPart Number: {record.part_number}\nOEMs: {record.oem_number or 'N/A'}",
             }
+            if 'hs_code' in ProductTmpl._fields and record.hs_code:
+                vals['hs_code'] = record.hs_code
+            # barcodes are unique across products
+            if record.barcode and not self.env['product.product'].search_count([('barcode', '=', record.barcode)]):
+                vals['barcode'] = record.barcode
 
             if record.product_tmpl_id:
-                record.product_tmpl_id.write(product_vals)
+                record.product_tmpl_id.write(vals)
                 product_tmpl = record.product_tmpl_id
             else:
-                product_tmpl = self.env['product.template'].create(product_vals)
+                product_tmpl = ProductTmpl.create(vals)
                 record.product_tmpl_id = product_tmpl.id
 
-            if record.image_ids and record.image_ids[0].image:
-                product_tmpl.image_1920 = record.image_ids[0].image
-                extra_images = []
-                for idx, img in enumerate(record.image_ids[1:]):
-                    extra_images.append((0, 0, {
-                        'name': img.name or f"{product_tmpl.name} - Image {idx + 2}",
-                        'image_1920': img.image,
-                    }))
-                product_tmpl.product_template_image_ids = [(5, 0, 0)] + extra_images
+            images = record.image_ids.filtered('image')
+            if images:
+                product_tmpl.image_1920 = images[0].image
+                product_tmpl.product_template_image_ids = [(5, 0, 0)] + [
+                    (0, 0, {'name': img.name or f"{product_tmpl.name} - Image {idx + 2}", 'image_1920': img.image})
+                    for idx, img in enumerate(images[1:])]
 
             if record.category:
                 categ = self.env['product.public.category'].search([('name', '=', record.category)], limit=1)
@@ -104,585 +518,28 @@ class TecdocPart(models.Model):
                 product_tmpl.public_categ_ids = [(4, categ.id)]
 
             if record.brand:
-                vendor = self.env['res.partner'].search([('name', '=', record.brand), ('supplier_rank', '>', 0)], limit=1)
-                if not vendor:
-                    vendor = self.env['res.partner'].search([('name', '=', record.brand)], limit=1)
+                vendor = self.env['res.partner'].search([('name', '=', record.brand)], limit=1)
                 if not vendor:
                     vendor = self.env['res.partner'].create({'name': record.brand, 'supplier_rank': 1})
-
-                existing_seller = self.env['product.supplierinfo'].search([
-                    ('product_tmpl_id', '=', product_tmpl.id),
-                    ('partner_id', '=', vendor.id)
-                ], limit=1)
-                if not existing_seller:
-                    self.env['product.supplierinfo'].create({
-                        'product_tmpl_id': product_tmpl.id,
-                        'partner_id': vendor.id,
-                    })
-
-            if record.accessories_raw:
-                try:
-                    acc_list = json.loads(record.accessories_raw)
-                    acc_product_ids = []
-                    for acc in acc_list:
-                        acc_oem = acc.get('articleNo')
-                        acc_brand = acc.get('supplierName', '')
-                        if not acc_oem:
-                            continue
-                        existing_acc = self.env['product.template'].search([
-                            '|', ('default_code', '=', acc_oem),
-                                 ('tecdoc_article_number', '=', acc_oem)
-                        ], limit=1)
-                        if existing_acc:
-                            acc_product_ids.append(existing_acc.id)
-                        else:
-                            new_acc = self.env['product.template'].create({
-                                'name': f"{acc_brand} - {acc.get('articleProductName', 'Accessory')}",
-                                'default_code': acc_oem,
-                                'tecdoc_brand': acc_brand,
-                                'tecdoc_article_number': acc_oem,
-                                'type': 'consu',
-                'is_storable': True,
-                            })
-                            acc_product_ids.append(new_acc.id)
-                    if acc_product_ids:
-                        product_tmpl.accessory_product_ids = [(6, 0, acc_product_ids)]
-                except Exception as exc:
-                    _logger.warning(f"Accessories sync failed for {record.part_number}: {exc}")
-
-            if record.cross_reference_ids:
-                alt_product_ids = []
-                for cross in record.cross_reference_ids:
-                    if not cross.oem_number:
-                        continue
-                    existing_alt = self.env['product.template'].search([
-                        '|', ('default_code', '=', cross.oem_number),
-                             ('tecdoc_article_number', '=', cross.oem_number)
-                    ], limit=1)
-                    if existing_alt:
-                        alt_product_ids.append(existing_alt.id)
-                    else:
-                        new_alt = self.env['product.template'].create({
-                            'name': f"[{cross.oem_number}] - {cross.brand or 'Unknown Brand'}",
-                            'default_code': cross.oem_number,
-                            'tecdoc_brand': cross.brand or '',
-                            'tecdoc_article_number': cross.oem_number,
-                            'type': 'consu',
-                'is_storable': True,
-                        })
-                        alt_product_ids.append(new_alt.id)
-                if alt_product_ids:
-                    product_tmpl.alternative_product_ids = [(6, 0, alt_product_ids)]
-                    product_tmpl.optional_product_ids = [(6, 0, alt_product_ids)]
-
-
-    def action_fetch_cross_references(self):
-        CrossRef = self.env['tecdoc.part.cross_reference']
-        api_abstract = self.env['tecdoc.api.abstract']
-
-        for record in self:
-            if not record.article_id:
-                continue
-
-            data = api_abstract._make_rapidapi_request(f"/artlookup/select-article-cross-references/article-id/{record.article_id}/lang-id/4")
-            if isinstance(data, dict) and 'error' in data:
-                return {'type': 'ir.actions.client', 'tag': 'display_notification', 'params': {'title': 'API Error', 'message': data['message'], 'type': 'danger'}}
-
-            if data and isinstance(data, dict) and 'articles' in data:
-                for cross in data['articles']:
-                    oem_num = cross.get('articleNo', '')
-                    alt_brand = cross.get('supplierName', '')
-                    if oem_num and alt_brand:
-                        existing = CrossRef.search([('part_id', '=', record.id), ('oem_number', '=', oem_num)], limit=1)
-                        if not existing:
-                            CrossRef.create({
-                                'part_id': record.id,
-                                'oem_number': oem_num,
-                                'brand': alt_brand
-                            })
-                        elif not existing.brand or existing.brand == 'Unknown Brand':
-                            existing.brand = alt_brand
-
-        return {'type': 'ir.actions.client', 'tag': 'reload'}
-
-    def action_fetch_linked_vehicles(self):
-        Vehicle = self.env['tecdoc.vehicle'].sudo()
-        api_abstract = self.env['tecdoc.api.abstract']
-
-        for record in self:
-            search_no = record.oem_number if record.oem_number else record.part_number
-            if not search_no:
-                continue
-
-            data = api_abstract._make_rapidapi_request("/articles/get-compatible-cars-by-oem-no/type-id/1", params={
-                "langId": "4", "countryFilterId": "63", "articleOemNo": search_no
-            })
-
-            if isinstance(data, dict) and 'error' in data:
-                return {'type': 'ir.actions.client', 'tag': 'display_notification', 'params': {'title': 'API Error', 'message': data['message'], 'type': 'danger'}}
-
-            articles = (data.get('articles') if isinstance(data, dict) else None) or []
-            vehicles = []
-            for art in articles:
-                vehicles.extend(art.get('compatibleCars') or [])
-
-            seen = set()
-            unique_vehicles = []
-            for v in vehicles:
-                vid = str(v.get('vehicleId', ''))
-                if vid and vid != 'None' and vid not in seen:
-                    seen.add(vid)
-                    unique_vehicles.append(v)
-
-            vehicle_ids = []
-            for v in unique_vehicles:
-                v_id_str = str(v.get('vehicleId', ''))
-                if not v_id_str or v_id_str == 'None':
-                    continue
-
-                existing_vehicle = Vehicle.search([('vehicle_id', '=', v_id_str)], limit=1)
-                if not existing_vehicle:
-                    make_from = str(v.get('yearOfConstrFrom', ''))
-                    make_to = str(v.get('yearOfConstrTo', ''))
-                    make_date_str = f"{make_from}–{make_to}" if make_from and make_to else make_from or make_to
-                    existing_vehicle = Vehicle.create({
-                        'vehicle_id': v_id_str,
-                        'brand': v.get('manufacturerName', ''),
-                        'vehicle_model': v.get('modelName', ''),
-                        'type': v.get('typeEngineName', ''),
-                        'make_date': make_date_str,
-                    })
-                vehicle_ids.append(existing_vehicle.id)
-
-            if vehicle_ids:
-                record.write({'vehicle_ids': [(6, 0, vehicle_ids)]})
-
-        return {'type': 'ir.actions.client', 'tag': 'reload'}
-
-    def action_refetch_all_data(self):
-        for record in self:
-            record._reparse_raw_data()
-            record.action_fetch_cross_references()
-            record.action_fetch_linked_vehicles()
-            record.action_fallback_search_missing_info()
-            record.action_create_odoo_product()
-
-    def action_fallback_search_missing_info(self):
-        api_abstract = self.env['tecdoc.api.abstract']
-
-        for record in self:
-            needs_vehicles = not record.vehicle_ids
-            needs_cross_refs = not record.cross_reference_ids
-            needs_images = True
-
-            if not (needs_vehicles or needs_cross_refs or needs_images):
-                continue
-
-            search_candidates = []
-            if record.part_number:
-                search_candidates.append(record.part_number)
-            if record.cross_reference_ids:
-                for cross in record.cross_reference_ids:
-                    if cross.oem_number:
-                        search_candidates.append(cross.oem_number)
-
-            if not search_candidates:
-                continue
-
-            found_data = False
-            for candidate in search_candidates:
-                if found_data:
-                    break
-
-                data = api_abstract._make_rapidapi_request("/artlookup/search-articles-by-article-no", params={
-                    "langId": "4", "articleNo": candidate, "articleType": "ArticleNumber"
-                })
-
-                if isinstance(data, dict) and 'error' in data:
-                    return {'type': 'ir.actions.client', 'tag': 'display_notification', 'params': {'title': 'API Error', 'message': data['message'], 'type': 'danger'}}
-
-                articles = (data.get('articles') if isinstance(data, dict) else None) or []
-                for art in articles:
-                    art_id = str(art.get('articleId', ''))
-                    if art_id:
-                        update_vals = {}
-                        if not record.article_id:
-                            update_vals['article_id'] = art_id
-                        if not record.brand or record.brand == 'Unknown':
-                            update_vals['brand'] = art.get('brandName') or art.get('supplierName') or 'Unknown'
-                        if not record.name or 'Pending Fetch' in record.name:
-                            update_vals['name'] = art.get('genericArticleDescription') or art.get('articleProductName') or record.name
-                        if not record.oem_number:
-                            update_vals['oem_number'] = candidate
-                        if update_vals:
-                            record.write(update_vals)
-
-                        oem_candidates = [candidate]
-                        if record.oem_number and record.oem_number != candidate:
-                            oem_candidates.append(record.oem_number)
-
-                        if needs_cross_refs:
-                            cr_data = api_abstract._make_rapidapi_request(f"/artlookup/select-article-cross-references/article-id/{art_id}/lang-id/4")
-                            if isinstance(cr_data, dict) and 'articles' in cr_data:
-                                CrossRef = self.env['tecdoc.part.cross_reference']
-                                for cross in cr_data['articles']:
-                                    oem_num = cross.get('articleNo', '')
-                                    alt_brand = cross.get('supplierName', '')
-                                    if oem_num and alt_brand:
-                                        oem_candidates.append(oem_num)
-                                        exists = CrossRef.search([('part_id', '=', record.id), ('oem_number', '=', oem_num)], limit=1)
-                                        if not exists:
-                                            CrossRef.create({
-                                                'part_id': record.id,
-                                                'oem_number': oem_num,
-                                                'brand': alt_brand
-                                            })
-                                            needs_cross_refs = False
-
-                        if needs_vehicles:
-                            for oem_candidate in set(oem_candidates):
-                                if not needs_vehicles:
-                                    break
-                                v_data = api_abstract._make_rapidapi_request("/articles/get-compatible-cars-by-oem-no/type-id/1", params={
-                                    "langId": "4", "countryFilterId": "63", "articleOemNo": oem_candidate
-                                })
-                                if isinstance(v_data, dict) and 'articles' in v_data:
-                                    v_articles = v_data.get('articles') or []
-                                    v_list = []
-                                    for v_art in v_articles:
-                                        v_list.extend(v_art.get('compatibleCars') or [])
-
-                                    if not v_list:
-                                        continue
-
-                                    Vehicle = self.env['tecdoc.vehicle'].sudo()
-                                    new_v_ids = []
-                                    for v in v_list:
-                                        v_id_str = str(v.get('vehicleId', ''))
-                                        if not v_id_str or v_id_str == 'None':
-                                            continue
-                                        existing_vehicle = Vehicle.search([('vehicle_id', '=', v_id_str)], limit=1)
-                                        if not existing_vehicle:
-                                            make_from = str(v.get('yearOfConstrFrom', ''))
-                                            make_to = str(v.get('yearOfConstrTo', ''))
-                                            existing_vehicle = Vehicle.create({
-                                                'vehicle_id': v_id_str,
-                                                'brand': v.get('manufacturerName', ''),
-                                                'vehicle_model': v.get('modelName', ''),
-                                                'type': v.get('typeEngineName', ''),
-                                                'make_date': f"{make_from}–{make_to}" if make_from and make_to else make_from or make_to,
-                                            })
-                                        new_v_ids.append(existing_vehicle.id)
-                                    if new_v_ids:
-                                        record.write({'vehicle_ids': [(4, vid) for vid in new_v_ids]})
-                                        needs_vehicles = False
-
-                        if needs_images:
-                            media_data = api_abstract._make_rapidapi_request("/articles/article-all-media-info", params={
-                                "articleId": art_id, "langId": "4"
-                            })
-                            if isinstance(media_data, list):
-                                for media in media_data:
-                                    if media.get('articleMediaType') != 'PDF' and media.get('s3image'):
-                                        try:
-                                            img_dl = requests.get(media['s3image'], timeout=5)
-                                            if img_dl.status_code == 200:
-                                                exists = self.env['tecdoc.part.image'].search([
-                                                    ('part_id', '=', record.id),
-                                                    ('image_url', '=', media['s3image'])
-                                                ], limit=1)
-                                                if not exists:
-                                                    self.env['tecdoc.part.image'].create({
-                                                        'name': media.get('articleMediaFileName', 'image'),
-                                                        'part_id': record.id,
-                                                        'image_url': media['s3image'],
-                                                        'image': base64.b64encode(img_dl.content)
-                                                    })
-                                        except Exception as exc:
-                                            _logger.warning(f"Image download failed for {record.part_number}: {exc}")
-
-                        found_data = True
-                        break
-
-            record.action_create_odoo_product()
-
-    def _reparse_raw_data(self):
-        for record in self:
-            if record.raw_data:
-                try:
-                    article = json.loads(record.raw_data)
-                    oem_set = set()
-                    if record.oem_number:
-                        oem_set.update([x.strip() for x in record.oem_number.split(',') if x.strip()])
-
-                    native = (article.get('oemNumbers') or article.get('oeNumbers') or article.get('crossReferences') or [])
-                    if isinstance(native, list):
-                        for ref in native:
-                            if isinstance(ref, dict):
-                                oem = ref.get('oemNumber') or ref.get('articleNo') or ref.get('number')
-                                if oem:
-                                    oem_set.add(str(oem).strip())
-
-                    for ref in article.get('enriched_cross_refs', []):
-                        oem = ref.get('oemNumber')
-                        if oem:
-                            oem_set.add(str(oem).strip())
-
-                    if oem_set:
-                        record.oem_number = ", ".join(sorted(filter(None, oem_set)))
-                except Exception as exc:
-                    _logger.warning(f"Could not re-parse raw data for {record.part_number}: {exc}")
-
-    @api.model
-    def api_save_parts_from_data(self, articles_data, vehicle_data=None, oem_number=None, compatible_vehicles=None):
-        if not isinstance(articles_data, list):
-            return
-
-        api_abstract = self.env['tecdoc.api.abstract']
-        PartImage = self.env['tecdoc.part.image'].sudo()
-        Vehicle = self.env['tecdoc.vehicle'].sudo()
-        CrossRef = self.env['tecdoc.part.cross_reference'].sudo()
-
-        vehicle_record = self._get_or_create_vehicle(Vehicle, vehicle_data)
-        compatible_vehicle_ids = self._resolve_compatible_vehicles(Vehicle, compatible_vehicles)
-
-        article_ids = [str(a.get('articleId')) for a in articles_data if isinstance(a, dict) and a.get('articleId')]
-        specs_map = {}
-        if article_ids:
-            spec_data = api_abstract._make_rapidapi_request("/articles/get-article-specifications-list-of-articles-ids", method="POST", payload={"langId": 4, "articleIds": [int(aid) for aid in article_ids]})
-            if isinstance(spec_data, dict) and 'articles' in spec_data:
-                for art_spec in spec_data.get('articles', []):
-                    aid = str(art_spec.get('articleId'))
-                    specs_map[aid] = art_spec.get('allSpecifications', [])
-
-        for idx, article in enumerate(articles_data):
-            if not isinstance(article, dict):
-                continue
-
-            article_id = str(article.get('articleId', ''))
-            part_number = article.get('articleNo') or article.get('articleSearchNo', '')
-            if not part_number:
-                continue
-
-            try:
-                with self.env.cr.savepoint():
-                    consolidated_oems = self._consolidate_oems(article, oem_number)
-
-                    domain = [('article_id', '=', article_id)] if article_id else [('part_number', '=', part_number)]
-                    existing_part = self.search(domain, limit=1)
-
-                    vals = {
-                        'name': article.get('articleProductName', 'Unknown Part'),
-                        'part_number': part_number,
-                        'brand': article.get('supplierName', article.get('brandName', '')),
-                        'article_id': article_id,
-                        'category': article.get('articleProductName', ''),
-                        'raw_data': json.dumps(article),
-                    }
-
-                    specs = specs_map.get(article_id) or []
-                    specs_lines = []
-                    for spec in specs:
-                        name_raw = str(spec.get('criteriaName', ''))
-                        val_raw = str(spec.get('criteriaValue', ''))
-                        name = name_raw.lower()
-                        val_str = val_raw.replace(',', '.')
-
-                        if name_raw and val_raw:
-                            specs_lines.append(f"• {name_raw}: {val_raw}")
-
-                        try:
-                            if 'weight' in name:
-                                vals['weight'] = float(val_str)
-                            elif 'volume' in name:
-                                vals['volume'] = float(val_str)
-                            elif 'customs tariff number' in name or 'hs code' in name:
-                                vals['hs_code'] = val_str
-                            elif 'ean' in name or 'barcode' in name:
-                                vals['barcode'] = val_raw
-                        except ValueError:
-                            pass
-
-                    if specs_lines:
-                        vals['specs_text'] = "Specifications:\n" + "\n".join(specs_lines)
-
-                    if not vals.get('barcode'):
-                        vals['barcode'] = article.get('eanNumber', '')
-
-                    if idx < 2:
-                        acc_data = api_abstract._make_rapidapi_request(f"/articles/selecting-list-of-accessories-list-for-the-article/article-id/{article_id}/lang-id/4/country-filter-id/63")
-                        if isinstance(acc_data, dict) and acc_data.get('articles'):
-                            vals['accessories_raw'] = json.dumps(acc_data['articles'])
-
-                    if consolidated_oems:
-                        vals['oem_number'] = consolidated_oems
-                    if vehicle_data and isinstance(vehicle_data, dict):
-                        v_model = vehicle_data.get('carName', vehicle_data.get('modelName', ''))
-                        v_vin = vehicle_data.get('vin', vehicle_data.get('kba', ''))
-                        if v_model:
-                            vals['vehicle_model'] = v_model
-                        if v_vin:
-                            vals['vin'] = v_vin
-
-                    if existing_part:
-                        existing_part.write(vals)
-                        part_record = existing_part
-                    else:
-                        part_record = self.create(vals)
-
-                    if vehicle_record:
-                        part_record.vehicle_ids = [(4, vehicle_record.id)]
-                    if compatible_vehicle_ids:
-                        part_record.vehicle_ids = [(4, vid) for vid in compatible_vehicle_ids]
-
-                    self._save_cross_references(CrossRef, part_record, article.get('enriched_cross_refs', []))
-
-                    if idx < 2:
-                        self._save_part_image(PartImage, part_record, article)
-
-                    try:
-                        part_record.action_create_odoo_product()
-                    except Exception as exc:
-                        _logger.error(f"Odoo product sync failed for {part_number}: {exc}")
-
-            except Exception as exc:
-                _logger.error(f"Skipping article {part_number} due to DB error: {exc}")
-                continue
-
-    def _get_or_create_vehicle(self, Vehicle, vehicle_data):
-        if not vehicle_data or not isinstance(vehicle_data, dict):
-            return None
-
-        vin = vehicle_data.get('vin', '') or vehicle_data.get('kba', '')
-        brand = vehicle_data.get('makeName', '')
-        model = vehicle_data.get('modelName', '')
-        make_date = str(vehicle_data.get('yearOfConstrFrom', ''))
-        vtype = vehicle_data.get('typeName', '')
-        vehicle_id_s = str(vehicle_data.get('vehicleId', ''))
-        car_name = vehicle_data.get('carName', '')
-
-        if car_name and not brand:
-            parts = car_name.split(' ', 1)
-            brand = parts[0]
-            model = model or (parts[1] if len(parts) > 1 else '')
-
-        if not (vin or brand or (vehicle_id_s and vehicle_id_s != 'None')):
-            return None
-
-        if vehicle_id_s and vehicle_id_s != 'None':
-            domain = [('vehicle_id', '=', vehicle_id_s)]
-        elif vin:
-            domain = [('vin', '=', vin)]
-        else:
-            domain = [('brand', '=', brand), ('vehicle_model', '=', model)]
-
-        record = Vehicle.search(domain, limit=1)
-        if not record:
-            create_vals = {
-                'brand': brand,
-                'vehicle_model': model,
-                'make_date': make_date,
-                'type': vtype,
-            }
-            if vin:
-                create_vals['vin'] = vin
-            if vehicle_id_s and vehicle_id_s != 'None':
-                create_vals['vehicle_id'] = vehicle_id_s
-            record = Vehicle.create(create_vals)
-        return record
-
-    def _resolve_compatible_vehicles(self, Vehicle, compatible_vehicles):
-        if not compatible_vehicles:
-            return []
-
-        ids = []
-        for v in compatible_vehicles:
-            v_id_str = str(v.get('vehicleId', ''))
-            if not v_id_str or v_id_str == 'None':
-                continue
-
-            existing = Vehicle.search([('vehicle_id', '=', v_id_str)], limit=1)
-            if not existing:
-                make_from = str(v.get('yearOfConstrFrom', ''))
-                make_to = str(v.get('yearOfConstrTo', ''))
-                make_date_s = f"{make_from}\u2013{make_to}" if make_from and make_to else make_from or make_to
-                existing = Vehicle.create({
-                    'vehicle_id': v_id_str,
-                    'brand': v.get('manufacturerName', ''),
-                    'vehicle_model': v.get('modelName', ''),
-                    'type': v.get('typeEngineName', ''),
-                    'make_date': make_date_s,
-                })
-            ids.append(existing.id)
-
-        return ids
-
-    @staticmethod
-    def _consolidate_oems(article, oem_number):
-        oem_set = set()
-        if oem_number:
-            oem_set.add(oem_number)
-
-        native = (article.get('oemNumbers') or article.get('oeNumbers') or article.get('crossReferences') or [])
-        if isinstance(native, list):
-            for ref in native:
-                if isinstance(ref, dict):
-                    oem = ref.get('oemNumber') or ref.get('articleNo') or ref.get('number')
-                    if oem:
-                        oem_set.add(str(oem).strip())
-
-        for ref in article.get('enriched_cross_refs', []):
-            oem = ref.get('oemNumber')
-            if oem:
-                oem_set.add(str(oem).strip())
-
-        consolidated = ", ".join(sorted(filter(None, oem_set)))
-        return consolidated[:2000] if len(consolidated) > 2000 else consolidated
-
-    @staticmethod
-    def _save_cross_references(CrossRef, part_record, enriched_refs):
-        for ref in enriched_refs:
-            oem = ref.get('oemNumber') or ref.get('articleNo') or ref.get('number')
-            brand = ref.get('brandName') or ref.get('manufacturerName') or ref.get('mfrName') or ref.get('supplierName') or ref.get('brand') or ''
-            if not oem:
-                continue
-            exists = CrossRef.search([('part_id', '=', part_record.id), ('oem_number', '=', str(oem))], limit=1)
-            if not exists:
-                CrossRef.create({
-                    'part_id': part_record.id,
-                    'oem_number': str(oem),
-                    'brand': brand or '',
-                })
-
-    @staticmethod
-    def _save_part_image(PartImage, part_record, article):
-        images_to_save = []
-        images = article.get('images') or article.get('articleImages') or []
-        for img in images:
-            if isinstance(img, dict):
-                url = img.get('imageURL800') or img.get('imageURL400') or img.get('imageURL') or img.get('url')
-                if url:
-                    images_to_save.append((url, "image"))
-            elif isinstance(img, str) and img:
-                images_to_save.append((img, "image"))
-
-        if not images_to_save and article.get('s3image'):
-            images_to_save.append((article['s3image'], article.get('articleMediaFileName', 'image')))
-
-        for image_url, image_name in images_to_save:
-            exists = PartImage.search([('part_id', '=', part_record.id), ('image_url', '=', image_url)], limit=1)
-            if exists:
-                continue
-
-            try:
-                img_response = requests.get(image_url, timeout=5)
-                if img_response.status_code == 200:
-                    img_data = base64.b64encode(img_response.content)
-                    PartImage.create({
-                        'name': image_name,
-                        'part_id': part_record.id,
-                        'image_url': image_url,
-                        'image': img_data,
-                    })
-            except Exception as exc:
-                _logger.warning(f"Image download failed for {image_url}: {exc}")
+                if not self.env['product.supplierinfo'].search_count([('product_tmpl_id', '=', product_tmpl.id), ('partner_id', '=', vendor.id)]):
+                    self.env['product.supplierinfo'].create({'product_tmpl_id': product_tmpl.id, 'partner_id': vendor.id})
+
+            alternatives = record._find_existing_alternative_products() - product_tmpl
+            if alternatives:
+                product_tmpl.alternative_product_ids = [(6, 0, alternatives.ids)]
+
+
+    def _find_existing_alternative_products(self):
+        """Products already in the catalog that share an OEM number or are listed as cross references."""
+        self.ensure_one()
+        products = self.env['product.template']
+        keys = [k for k in (self.oem_keys or '').split(',') if k]
+        if keys:
+            # oem_keys is ",KEY1,KEY2,": matching ",KEY," is an exact match on a normalized number
+            domain = ['|'] * (len(keys) - 1) + [('oem_keys', 'like', f',{k},') for k in keys]
+            siblings = self.search(domain + [('id', '!=', self.id), ('product_tmpl_id', '!=', False)])
+            products |= siblings.mapped('product_tmpl_id')
+        numbers = self.cross_reference_ids.mapped('oem_number')
+        if numbers:
+            products |= products.search([('default_code', 'in', numbers)])
+        return products

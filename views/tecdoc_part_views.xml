@@ -28,7 +28,7 @@
         <field name="name">tecdoc.part.tree</field>
         <field name="model">tecdoc.part</field>
         <field name="arch" type="xml">
-            <tree>
+            <list>
                 <field name="part_number"/>
                 <field name="name"/>
                 <field name="brand"/>
@@ -36,7 +36,7 @@
                 <field name="category" optional="show"/>
                 <field name="product_tmpl_id"/>
                 <field name="vehicle_ids" widget="many2many_tags" optional="hide"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -46,11 +46,11 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <button name="action_refetch_all_data" string="Refetch &amp; Sync Data" type="object" class="oe_highlight" invisible="article_id == False" help="Re-parses missing OEM numbers, fetches missing alternatives/vehicles, and syncs to Odoo Product."/>
-                    <button name="action_fallback_search_missing_info" string="Deep Search Missing Info" type="object" class="btn-warning" help="If normal fetch failed, tries to find missing info using part number or alternative OEMs." confirm="Are you sure you want to run a deep search? This may use additional RapidAPI credits."/>
-                    <button name="action_create_odoo_product" string="Create Odoo Product" type="object" invisible="product_tmpl_id != False"/>
-                    <button name="action_fetch_cross_references" string="Fetch Alternatives" type="object" invisible="article_id == False"/>
-                    <button name="action_fetch_linked_vehicles" string="Fetch Compatible Vehicles" type="object" invisible="article_id == False"/>
+                    <button name="action_refetch_all_data" string="Refetch &amp; Sync Data" type="object" class="oe_highlight" invisible="article_id == False" help="Re-parses missing OEM numbers, fetches missing alternatives/vehicles, and syncs to Odoo Product." groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fallback_search_missing_info" string="Deep Search Missing Info" type="object" class="btn-warning" help="If normal fetch failed, tries to find missing info using part number or alternative OEMs." confirm="Are you sure you want to run a deep search? This may use additional RapidAPI credits." groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_create_odoo_product" string="Create Odoo Product" type="object" invisible="product_tmpl_id != False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fetch_cross_references" string="Fetch Alternatives" type="object" invisible="article_id == False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
+                    <button name="action_fetch_linked_vehicles" string="Fetch Compatible Vehicles" type="object" invisible="article_id == False" groups="rapidapi_bdeel.group_tecdoc_operator"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -83,11 +83,11 @@
                     <notebook>
                         <page string="Images">
                             <field name="image_ids">
-                                <tree>
+                                <list>
                                     <field name="image" widget="image" options="{'size': [64, 64]}"/>
                                     <field name="name"/>
                                     <field name="image_url"/>
-                                </tree>
+                                </list>
                                 <form>
                                     <sheet>
                                         <group>
@@ -101,21 +101,21 @@
                         </page>
                         <page string="Cross References">
                             <field name="cross_reference_ids">
-                                <tree>
+                                <list>
                                     <field name="brand"/>
                                     <field name="oem_number"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                         <page string="Compatible Vehicles">
                             <field name="vehicle_ids">
-                                <tree>
+                                <list>
                                     <field name="brand"/>
                                     <field name="vehicle_model"/>
                                     <field name="make_date"/>
                                     <field name="type"/>
                                     <field name="vin"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                         <page string="Raw Data">
@@ -147,10 +147,10 @@
     <record id="action_tecdoc_parts" model="ir.actions.act_window">
         <field name="name">TecDoc Parts</field>
         <field name="res_model">tecdoc.part</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
-    <menuitem id="menu_tecdoc_root"
+    <menuitem id="menu_tecdoc_root" groups="rapidapi_bdeel.group_tecdoc_viewer"
               name="TecDoc Parts"
               sequence="10"/>
 
@@ -163,7 +163,7 @@
     <record id="action_tecdoc_vehicles" model="ir.actions.act_window">
         <field name="name">Vehicles Database</field>
         <field name="res_model">tecdoc.vehicle</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
     <menuitem id="menu_tecdoc_vehicles"

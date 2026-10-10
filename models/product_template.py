@@ -3,24 +3,26 @@ from odoo import models, fields, api
 class ProductTemplate(models.Model):
     _inherit = 'product.template'
 
-    tecdoc_part_id = fields.Many2one('tecdoc.part', string="Linked TecDoc Part")
+    tecdoc_part_id = fields.Many2one('tecdoc.part', string="Linked TecDoc Part", groups='rapidapi_bdeel.group_tecdoc_viewer')
 
     tecdoc_vehicle_ids = fields.Many2many(
         'tecdoc.vehicle',
         compute='_compute_tecdoc_vehicle_ids',
         string="Compatible Vehicles",
+        groups='rapidapi_bdeel.group_tecdoc_viewer',
     )
     tecdoc_cross_reference_ids = fields.One2many(
         'tecdoc.part.cross_reference',
         compute='_compute_tecdoc_cross_reference_ids',
         string="Alternative OEMs",
+        groups='rapidapi_bdeel.group_tecdoc_viewer',
     )
 
-    tecdoc_oem_number = fields.Text(related='tecdoc_part_id.oem_number', string="OEM Numbers", readonly=True)
-    tecdoc_brand = fields.Char(related='tecdoc_part_id.brand', string="TecDoc Brand", readonly=True)
-    tecdoc_article_number = fields.Char(related='tecdoc_part_id.part_number', string="Article/Part Number", readonly=True)
-    tecdoc_image_ids = fields.One2many(related='tecdoc_part_id.image_ids', string="TecDoc Images", readonly=True)
-    tecdoc_raw_data = fields.Text(related='tecdoc_part_id.raw_data', string="TecDoc Raw Data", readonly=True)
+    tecdoc_oem_number = fields.Text(related='tecdoc_part_id.oem_number', string="OEM Numbers", readonly=True, groups='rapidapi_bdeel.group_tecdoc_viewer')
+    tecdoc_brand = fields.Char(related='tecdoc_part_id.brand', string="TecDoc Brand", readonly=True, groups='rapidapi_bdeel.group_tecdoc_viewer')
+    tecdoc_article_number = fields.Char(related='tecdoc_part_id.part_number', string="Article/Part Number", readonly=True, groups='rapidapi_bdeel.group_tecdoc_viewer')
+    tecdoc_image_ids = fields.One2many(related='tecdoc_part_id.image_ids', string="TecDoc Images", readonly=True, groups='rapidapi_bdeel.group_tecdoc_viewer')
+    tecdoc_raw_data = fields.Text(related='tecdoc_part_id.raw_data', string="TecDoc Raw Data", readonly=True, groups='rapidapi_bdeel.group_tecdoc_viewer')
 
     @api.depends('tecdoc_part_id', 'tecdoc_part_id.vehicle_ids')
     def _compute_tecdoc_vehicle_ids(self):

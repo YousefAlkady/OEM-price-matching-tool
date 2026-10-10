@@ -4,12 +4,15 @@
         <field name="name">tecdoc.api.log.tree</field>
         <field name="model">tecdoc.api.log</field>
         <field name="arch" type="xml">
-            <tree decoration-danger="status == 'error'" decoration-success="status == 'success'">
+            <list decoration-danger="status == 'error'" decoration-success="status == 'success'" decoration-muted="status == 'cached'">
                 <field name="create_date"/>
+                <field name="create_uid" optional="show"/>
                 <field name="endpoint"/>
                 <field name="response_code"/>
                 <field name="status"/>
-            </tree>
+                <field name="billed" optional="show"/>
+                <field name="duration_ms" optional="hide"/>
+            </list>
         </field>
     </record>
 
@@ -24,9 +27,13 @@
                             <field name="endpoint"/>
                             <field name="status"/>
                             <field name="response_code"/>
+                            <field name="billed"/>
                         </group>
                         <group>
                             <field name="create_date" readonly="1"/>
+                            <field name="create_uid" readonly="1"/>
+                            <field name="duration_ms"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
                         </group>
                     </group>
                     <notebook>
@@ -42,13 +49,33 @@
         </field>
     </record>
 
+    <record id="view_tecdoc_api_log_search" model="ir.ui.view">
+        <field name="name">tecdoc.api.log.search</field>
+        <field name="model">tecdoc.api.log</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="endpoint"/>
+                <filter name="billed" string="Billed" domain="[('billed', '=', True)]"/>
+                <filter name="cached" string="From Cache" domain="[('status', '=', 'cached')]"/>
+                <filter name="errors" string="Errors" domain="[('status', '=', 'error')]"/>
+                <separator/>
+                <filter name="this_month" string="Created On" date="create_date"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_status" string="Status" context="{'group_by': 'status'}"/>
+                    <filter name="group_endpoint" string="Endpoint" context="{'group_by': 'endpoint'}"/>
+                    <filter name="group_user" string="User" context="{'group_by': 'create_uid'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <record id="action_tecdoc_api_log" model="ir.actions.act_window">
         <field name="name">API Logs</field>
         <field name="res_model">tecdoc.api.log</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
     </record>
 
-    <menuitem id="menu_tecdoc_api_log"
+    <menuitem id="menu_tecdoc_api_log" groups="rapidapi_bdeel.group_tecdoc_manager"
               name="API Logs"
               parent="menu_tecdoc_root"
               action="action_tecdoc_api_log"
