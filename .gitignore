@@ -10,3 +10,5 @@ venv/
 .agents/
 # research scratch
 research_notes/
+tests/fixtures/
+.env
