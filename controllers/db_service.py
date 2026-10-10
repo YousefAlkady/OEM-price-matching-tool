@@ -1,3 +1,4 @@
+import json
 import logging
 from odoo.http import request
 
@@ -27,10 +28,9 @@ class DbServiceMixin:
             for part in parts:
                 if part.raw_data:
                     try:
-                        import json
                         result.append(json.loads(part.raw_data))
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _logger.warning(f"Cached raw_data for part {part.id} is not valid JSON: {exc}")
             if result:
                 return result
         return None

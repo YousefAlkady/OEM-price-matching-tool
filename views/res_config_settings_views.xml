@@ -10,7 +10,7 @@
                 <app data-string="TecDoc" string="TecDoc Integration" name="tecdoc_integration" groups="base.group_system">
                     <block title="RapidAPI Settings" name="tecdoc_rapidapi_settings">
                         <setting string="API Key" help="Your RapidAPI Key for Auto Parts Catalog">
-                            <field name="tecdoc_rapidapi_key"/>
+                            <field name="tecdoc_rapidapi_key" password="True"/>
                         </setting>
                         <setting string="API Host" help="The host for the RapidAPI Auto Parts Catalog">
                             <field name="tecdoc_rapidapi_host"/>

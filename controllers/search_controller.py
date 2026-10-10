@@ -1,5 +1,5 @@
 import logging
-
+import time
 
 from odoo import http
 from odoo.http import request
@@ -13,7 +13,6 @@ class SearchController(DbServiceMixin, http.Controller):
 
     @http.route('/api/tecdoc/search', type='json', auth='user', methods=['POST'], csrf=False)
     def search_parts(self, search_type, query=None, **kwargs):
-        import time
         now = time.time()
         session = request.session
         history = session.get('tecdoc_search_history', [])
@@ -84,14 +83,15 @@ class SearchController(DbServiceMixin, http.Controller):
 
         if isinstance(data, dict) and "error" in data:
             err_msg = data.get("message", data.get("error", "Unknown error"))
-            # surface quota errors
-            if data.get("error") == "rate_limit" or "quota" in str(err_msg).lower():
+            if data.get("error") == "quota_exceeded":
                 return {
                     "status":  429,
                     "error":   "Monthly quota exceeded",
-                    "message": "You have used all your RapidAPI requests for this month. Please upgrade your plan at rapidapi.com.",
+                    "message": err_msg,
                     "data":    [],
                 }
+            if data.get("error") == "rate_limit":
+                return {"status": 429, "error": "Too Many Requests", "message": err_msg, "data": []}
             return {"status": 500, "error": "API Request Failed", "message": err_msg, "data": []}
 
         articles = data.get('articles', data) if isinstance(data, dict) else data
@@ -115,9 +115,8 @@ class SearchController(DbServiceMixin, http.Controller):
                 vehicle_data['vehicleId'] = str(kwargs.get('vehicle_id'))
 
         compatible_vehicles_list = []
-        primary_rate_limited = isinstance(data, dict) and data.get('error') == 'rate_limit'
 
-        if isinstance(articles, list) and not primary_rate_limited:
+        if isinstance(articles, list):
             compatible_vehicles_list = self._run_enrichment_cascade(
                 articles, search_type, query
             )
@@ -295,7 +294,7 @@ class SearchController(DbServiceMixin, http.Controller):
                 try:
                     extra = self._fetch_compatible_vehicles(art_no)
                     compatible_vehicles.extend(extra)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _logger.warning(f"Cascade: compatible vehicles failed for {art_no}: {exc}")
 
         return compatible_vehicles
