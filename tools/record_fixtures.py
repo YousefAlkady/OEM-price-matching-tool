@@ -49,16 +49,21 @@ def first(d, *keys):
 
 mf = call("manufacturers", "/manufacturers/list/type-id/1")
 # Sample OEM numbers taken from the client's product export (Hyundai / Toyota / Nissan)
-for label, oem in (("hyundai", "86551-AA000"), ("toyota_oem", "04465-0K090")):
+for label, oem in (("hyundai", "86551-AA000"), ("toyota_oem", "04465-0K090"), ("hyundai_pads", "58101-3XA10"),
+                   ("chery", "A21-3505010AC"), ("geely", "1064002393"), ("nissan_filter", "16546-4BA0A")):
     s = call(f"search_oem_{label}", "/artlookup/search-articles-by-article-no",
              params={"langId": "4", "articleNo": oem, "articleType": "OENumber"})
     arts = s["body"].get("articles") if isinstance(s["body"], dict) else None
-    if arts and label == "hyundai":
+    if arts and label == "toyota_oem":
         aid = str(arts[0].get("articleId"))
         call("cross_references", f"/artlookup/select-article-cross-references/article-id/{aid}/lang-id/4")
         call("media", "/articles/article-all-media-info", params={"articleId": aid, "langId": "4"})
         call("specs", "/articles/get-article-specifications-list-of-articles-ids", "POST", data={"langId": 4, "articleIds": [int(aid)]})
         call("accessories", f"/articles/selecting-list-of-accessories-list-for-the-article/article-id/{aid}/lang-id/4/country-filter-id/63")
+call("compatible_cars_toyota", "/articles/get-compatible-cars-by-oem-no/type-id/1",
+     params={"langId": "4", "countryFilterId": "63", "articleOemNo": "04465-0K090"})
+call("compatible_cars_toyota_nofilter", "/articles/get-compatible-cars-by-oem-no/type-id/1",
+     params={"langId": "4", "articleOemNo": "04465-0K090"})
 call("compatible_cars_hyundai", "/articles/get-compatible-cars-by-oem-no/type-id/1",
      params={"langId": "4", "countryFilterId": "63", "articleOemNo": "86551-AA000"})
 call("compatible_cars_hyundai_egypt_filter_test", "/articles/get-compatible-cars-by-oem-no/type-id/1",

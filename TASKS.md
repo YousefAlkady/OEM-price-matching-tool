@@ -7,7 +7,7 @@ Verification command for all tasks unless stated:
 
 ## Phase 0: Dev environment (do first)
 - [x] 0.0 Phase 1 fixes merged to local `main`. (Push blocked: remote repo not found.)
-- [ ] 0.1 Record API fixtures (`tools/record_fixtures.py`, about 12 calls). Needs `.env` with RAPIDAPI_KEY. AC: one JSON per endpoint in `tests/fixtures/`; findings note (real field names, which fields hold OEM numbers, what `countryFilterId` does). Dep: owner provides key. [S]
+- [x] 0.1 Record API fixtures (done, 17 calls; 83/100 free calls left). Findings in `docs/api-findings.md`.
 - [ ] 0.2 Odoo 18 test harness: venv deps installed, throwaway DB, `odoo.conf` in `C:\Odoo\devenv`, module symlinked as `rapidapi_bdeel`. AC: module installs with zero errors/warnings; one smoke test passes. Dep: Postgres login. [S]
 - [ ] 0.3 Fix any install errors found by 0.2 (view xml, field names, deps). AC: clean install + upgrade. Dep 0.2. [S-M]
 ### Checkpoint 0: module installs on Odoo 18, fixtures exist, findings written into `docs/api-findings.md`.
@@ -22,7 +22,8 @@ Verification command for all tasks unless stated:
 - [ ] 2.7 Dedupe + unique constraint `(article_id)`/`(oem_key)` with a migration that merges existing duplicates. AC: install on DB with seeded duplicates merges them. Dep 2.3. [S]
 - [ ] 2.8 Security: groups Viewer/Operator/Admin, rewrite `ir.model.access.csv`, record rules, controllers stop using blanket `sudo()`. AC: Viewer cannot write/delete (test per model); Operator can search/enrich; Admin sees settings and budget. [M]
 - [ ] 2.9 Replace session-based rate limit with per-user DB-backed limit. AC: new session cannot bypass. Dep 2.1. [S]
-- [ ] 2.10 Fix category field and locale (`countryFilterId`/`langId` as settings with Egypt/GCC default chosen from findings). AC: category differs from name; settings change request params. Dep 0.1. [S]
+- [ ] 2.10 Fix category field, remove the `countryFilterId` assumption (no effect per findings), read `constructionIntervalStart/End` for vehicle dates, `langId` as setting. AC: category differs from name; vehicle date range filled on fixtures. Dep 0.1. [S]
+- [ ] 2.11 Bound the data: keep a ranked top-N alternatives set (not hundreds), and filter fitment to the client's makes/models, stored compactly (fixture shows 14,792 cars for one OEM). AC: enriching the Toyota fixture stores <= N alternatives and only matching vehicles. See `docs/api-findings.md`. Dep 2.5. [M]
 ### Checkpoint 2: one OEM search on fixtures = at most 3 logged calls, repeat = 0; budget stops calls; security tests pass; code-review + security-review run; owner review; merge.
 
 ## Phase 3: Inventory-first enrichment and first n8n flow
